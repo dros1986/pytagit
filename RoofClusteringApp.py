@@ -14,6 +14,7 @@ import albumentations as A
 import torch.nn.functional as F
 from einops import rearrange
 import cv2
+from OOD4Inclusion import OOD4Inclusion  # Import the OOD4Inclusion class
 
 
 class DraggableLabel(QtWidgets.QLabel):
@@ -45,9 +46,36 @@ class DraggableLabel(QtWidgets.QLabel):
             self.setStyleSheet("border: 2px solid transparent;")  # Transparent border for unselected images
 
 
+class ThresholdDialog(QtWidgets.QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Set Threshold")
+        self.setModal(True)
+        self.threshold = 0.010  # Default threshold
+
+        layout = QtWidgets.QVBoxLayout(self)
+
+        # Threshold input
+        self.threshold_input = QtWidgets.QDoubleSpinBox()
+        self.threshold_input.setRange(0.0, 1.0)
+        self.threshold_input.setDecimals(4)
+        self.threshold_input.setSingleStep(0.1)
+        self.threshold_input.setValue(self.threshold)
+        layout.addWidget(QtWidgets.QLabel("Threshold:"))
+        layout.addWidget(self.threshold_input)
+
+        # Run button
+        self.run_button = QtWidgets.QPushButton("Run")
+        self.run_button.clicked.connect(self.accept)
+        layout.addWidget(self.run_button)
+
+    def get_threshold(self):
+        return self.threshold_input.value()
+
+
 class RoofClusteringApp(QtWidgets.QMainWindow):
     
-    def __init__(self, features_file, root_folder, schema_file, max_samples=500, n_images_per_row=8, image_height=150, image_width=150, window_height=900, window_width=1400):
+    def __init__(self, features_file, root_folder, schema_file, max_samples=2000, n_images_per_row=8, image_height=150, image_width=150, window_height=900, window_width=1400):
         super().__init__()
         self.features_file = features_file
         self.root_folder = root_folder
@@ -85,7 +113,6 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             self.assignments = data.get('assignments', {})
             self.selected_images = data.get('selected_images', {})  # Load selected images per attribute
         else:
-            # images_folder = os.path.join(self.root_folder, 'images')
             images_folder = self.root_folder
             self.image_paths = self.get_all_image_paths(images_folder)[:self.max_samples]
             self.features = self.extract_features(self.image_paths)
@@ -126,6 +153,18 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.attribute_selector.currentTextChanged.connect(self.change_attribute)
         layout.addWidget(self.attribute_selector)
         
+        # Auto Classify group box
+        auto_classify_group = QtWidgets.QGroupBox("Auto Classify")
+        auto_classify_layout = QtWidgets.QHBoxLayout()
+        
+        # OOD button
+        self.ood_button = QtWidgets.QPushButton("OOD")
+        self.ood_button.clicked.connect(self.run_ood_classification)
+        auto_classify_layout.addWidget(self.ood_button)
+        
+        auto_classify_group.setLayout(auto_classify_layout)
+        layout.addWidget(auto_classify_group)
+        
         # Cluster selection buttons
         self.button_layout = QtWidgets.QHBoxLayout()
         self.cluster_buttons = {}
@@ -142,6 +181,58 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         layout.addWidget(self.image_scroll_area)
         
         self.display_cluster_images()
+
+    def change_attribute(self, attribute):
+        self.current_attribute = attribute
+        self.current_cluster = self.schema[self.current_attribute][0]  # Reset to the first cluster value
+        self.assign_images_to_clusters()
+        self.update_cluster_buttons()  # Update the cluster buttons
+        self.display_cluster_images()  # Display images for the new attribute and cluster
+
+    def run_ood_classification(self):
+        # Open threshold dialog
+        dialog = ThresholdDialog(self)
+        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            threshold = dialog.get_threshold()
+            
+            # Get selected feature vectors for the current cluster
+            selected_indices = self.clusters[self.current_attribute].get(self.current_cluster, [])
+            selected_features = self.features[selected_indices]
+            
+            # Get unselected feature vectors from other clusters, excluding selected samples
+            unselected_indices = []
+            for cluster, indices in self.clusters[self.current_attribute].items():
+                if cluster != self.current_cluster:
+                    for idx in indices:
+                        image_path = self.image_paths[idx]
+                        if image_path not in self.selected_images.get(self.current_attribute, set()):
+                            unselected_indices.append(idx)
+            unselected_features = self.features[unselected_indices]
+            
+            # Use OOD4Inclusion to classify unselected samples
+            ood_classifier = OOD4Inclusion()
+            ood_classifier.set_clean_distribution(self.current_cluster, selected_features)
+            inlier_mask, _ = ood_classifier.evaluate_new_samples(self.current_cluster, unselected_features, threshold)
+            
+            # Assign inliers to the current cluster
+            for idx, is_inlier in zip(unselected_indices, inlier_mask):
+                if is_inlier:
+                    image_path = self.image_paths[idx]
+                    if image_path not in self.assignments:
+                        self.assignments[image_path] = {}  # Initialize if not present
+                    self.assignments[image_path][self.current_attribute] = self.current_cluster
+            
+            # Save updated assignments
+            torch.save({
+                'features': self.features,
+                'image_paths': self.image_paths,
+                'assignments': self.assignments,
+                'selected_images': self.selected_images
+            }, self.features_file)
+            
+            # Refresh the UI
+            self.assign_images_to_clusters()
+            self.display_cluster_images()
 
     def update_cluster_buttons(self):
         # Clear existing buttons
@@ -175,7 +266,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
     def reassign_image_to_cluster(self, image_path, target_cluster):
         # Update the assignments dictionary
         if image_path not in self.assignments:
-            self.assignments[image_path] = {}
+            self.assignments[image_path] = {}  # Initialize if not present
         self.assignments[image_path][self.current_attribute] = target_cluster
         
         # Reassign the image to the new cluster
@@ -189,7 +280,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             'features': self.features,
             'image_paths': self.image_paths,
             'assignments': self.assignments,
-            'selected_images': self.selected_images  # Save selected images per attribute
+            'selected_images': self.selected_images
         }, self.features_file)
         
         # Refresh the UI
@@ -235,13 +326,6 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             row = idx // self.n_images_per_row
             col = idx % self.n_images_per_row
             self.image_layout.addWidget(label, row, col)
-
-    def change_attribute(self, attribute):
-        self.current_attribute = attribute
-        self.current_cluster = self.schema[self.current_attribute][0]  # Reset to the first cluster value
-        self.assign_images_to_clusters()
-        self.update_cluster_buttons()  # Update the cluster buttons
-        self.display_cluster_images()  # Display images for the new attribute and cluster
 
     def change_cluster(self, cluster):
         self.current_cluster = cluster
