@@ -47,13 +47,13 @@ class DraggableLabel(QtWidgets.QLabel):
 
 class RoofClusteringApp(QtWidgets.QMainWindow):
     
-    def __init__(self, features_file, root_folder, schema_file, max_samples=500, image_height=150, image_width=150, window_height=900, window_width=1400):
+    def __init__(self, features_file, root_folder, schema_file, max_samples=500, n_images_per_row=8, image_height=150, image_width=150, window_height=900, window_width=1400):
         super().__init__()
         self.features_file = features_file
         self.root_folder = root_folder
         self.schema_file = schema_file
         self.max_samples = max_samples  # Limit number of images to avoid slowdown
-        self.n_images_per_row = 8  # Number of images per row
+        self.n_images_per_row = n_images_per_row  # Number of images per row
         self.image_height = image_height
         self.image_width = image_width
         self.window_height = window_height
