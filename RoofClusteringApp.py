@@ -51,14 +51,13 @@ class ThresholdDialog(QtWidgets.QDialog):
         super().__init__(parent)
         self.setWindowTitle("Set Threshold")
         self.setModal(True)
-        self.threshold = 0.010  # Default threshold
+        self.threshold = 0.5  # Default threshold
 
         layout = QtWidgets.QVBoxLayout(self)
 
         # Threshold input
         self.threshold_input = QtWidgets.QDoubleSpinBox()
         self.threshold_input.setRange(0.0, 1.0)
-        self.threshold_input.setDecimals(4)
         self.threshold_input.setSingleStep(0.1)
         self.threshold_input.setValue(self.threshold)
         layout.addWidget(QtWidgets.QLabel("Threshold:"))
@@ -75,7 +74,7 @@ class ThresholdDialog(QtWidgets.QDialog):
 
 class RoofClusteringApp(QtWidgets.QMainWindow):
     
-    def __init__(self, features_file, root_folder, schema_file, max_samples=2000, n_images_per_row=8, image_height=150, image_width=150, window_height=900, window_width=1400):
+    def __init__(self, features_file, root_folder, schema_file, max_samples=500, n_images_per_row=8, image_height=150, image_width=150, window_height=900, window_width=1400):
         super().__init__()
         self.features_file = features_file
         self.root_folder = root_folder
@@ -199,14 +198,13 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             selected_indices = self.clusters[self.current_attribute].get(self.current_cluster, [])
             selected_features = self.features[selected_indices]
             
-            # Get unselected feature vectors from other clusters, excluding selected samples
+            # Get unselected feature vectors from other clusters and not verified samples from the current cluster
             unselected_indices = []
             for cluster, indices in self.clusters[self.current_attribute].items():
-                if cluster != self.current_cluster:
-                    for idx in indices:
-                        image_path = self.image_paths[idx]
-                        if image_path not in self.selected_images.get(self.current_attribute, set()):
-                            unselected_indices.append(idx)
+                for idx in indices:
+                    image_path = self.image_paths[idx]
+                    if image_path not in self.selected_images.get(self.current_attribute, set()):
+                        unselected_indices.append(idx)
             unselected_features = self.features[unselected_indices]
             
             # Use OOD4Inclusion to classify unselected samples
@@ -214,13 +212,15 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             ood_classifier.set_clean_distribution(self.current_cluster, selected_features)
             inlier_mask, _ = ood_classifier.evaluate_new_samples(self.current_cluster, unselected_features, threshold)
             
-            # Assign inliers to the current cluster
+            # Assign inliers to the current cluster and outliers to "undefined"
             for idx, is_inlier in zip(unselected_indices, inlier_mask):
+                image_path = self.image_paths[idx]
+                if image_path not in self.assignments:
+                    self.assignments[image_path] = {}  # Initialize if not present
                 if is_inlier:
-                    image_path = self.image_paths[idx]
-                    if image_path not in self.assignments:
-                        self.assignments[image_path] = {}  # Initialize if not present
                     self.assignments[image_path][self.current_attribute] = self.current_cluster
+                else:
+                    self.assignments[image_path][self.current_attribute] = "undefined"
             
             # Save updated assignments
             torch.save({
