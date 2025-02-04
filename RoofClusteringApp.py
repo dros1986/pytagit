@@ -47,13 +47,17 @@ class DraggableLabel(QtWidgets.QLabel):
 
 class RoofClusteringApp(QtWidgets.QMainWindow):
     
-    def __init__(self, features_file, root_folder, schema_file):
+    def __init__(self, features_file, root_folder, schema_file, max_samples=500, image_height=150, image_width=150, window_height=900, window_width=1400):
         super().__init__()
         self.features_file = features_file
         self.root_folder = root_folder
         self.schema_file = schema_file
-        self.max_samples = 300  # Limit number of images to avoid slowdown
-        self.n_images_per_row = 10  # Number of images per row
+        self.max_samples = max_samples  # Limit number of images to avoid slowdown
+        self.n_images_per_row = 8  # Number of images per row
+        self.image_height = image_height
+        self.image_width = image_width
+        self.window_height = window_height
+        self.window_width = window_width
         self.load_schema()
         self.current_attribute = list(self.schema.keys())[0]  # Default to first attribute
         self.current_cluster = "undefined"
@@ -81,7 +85,8 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             self.assignments = data.get('assignments', {})
             self.selected_images = data.get('selected_images', {})  # Load selected images per attribute
         else:
-            images_folder = os.path.join(self.root_folder, 'images')
+            # images_folder = os.path.join(self.root_folder, 'images')
+            images_folder = self.root_folder
             self.image_paths = self.get_all_image_paths(images_folder)[:self.max_samples]
             self.features = self.extract_features(self.image_paths)
             self.assignments = {}
@@ -109,7 +114,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
 
     def init_ui(self):
         self.setWindowTitle("Roof Clustering by Attribute")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setGeometry(100, 100, self.window_width, self.window_height)
         
         central_widget = QtWidgets.QWidget()
         self.setCentralWidget(central_widget)
@@ -130,6 +135,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         # Image display area
         self.image_scroll_area = QtWidgets.QScrollArea()
         self.image_container = QtWidgets.QWidget()
+        self.image_container.setStyleSheet("background-color: rgba(255, 255, 255, 255);")
         self.image_layout = QtWidgets.QGridLayout(self.image_container)
         self.image_scroll_area.setWidget(self.image_container)
         self.image_scroll_area.setWidgetResizable(True)
@@ -222,7 +228,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])[:self.max_samples]
         for idx, image_idx in enumerate(cluster_images):
             image_path = self.image_paths[image_idx]
-            pixmap = QtGui.QPixmap(image_path).scaled(100, 100, QtCore.Qt.AspectRatioMode.KeepAspectRatio)
+            pixmap = QtGui.QPixmap(image_path).scaled(self.image_width, self.image_height, QtCore.Qt.AspectRatioMode.KeepAspectRatio)
             label = DraggableLabel(image_path, self)  # Pass the main window reference
             label.setPixmap(pixmap)
             label.update_selection_state()  # Update the border based on selection
@@ -268,7 +274,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
 def main():
     app = QtWidgets.QApplication(sys.argv)
     features_file = 'features.pt'
-    root_folder = 'segmentation_dataset'
+    root_folder = 'segmentation_dataset/cropped_images'
     schema_file = 'schema.json'
     main_window = RoofClusteringApp(features_file, root_folder, schema_file)
     main_window.show()
