@@ -354,23 +354,30 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             button.setFixedHeight(50)
             button.clicked.connect(partial(self.change_cluster, value))
             button.setAcceptDrops(True)  # Enable drop events
-            button.dragEnterEvent = self.drag_enter_event
-            button.dropEvent = partial(self.drop_event, value)
+            button.dragEnterEvent = partial(self.drag_enter_event, button)
+            button.dragLeaveEvent = partial(self.drag_leave_event, button)
+            button.dropEvent = partial(self.drop_event, value, button)
             self.button_layout.addWidget(button)
             self.cluster_buttons[value] = button
         
         # Highlight the current cluster button
         self.highlight_current_cluster_button()
 
-    def drag_enter_event(self, event):
+    def drag_enter_event(self, button, event):
         if event.mimeData().hasText():
             event.acceptProposedAction()
+            button.original_style = button.styleSheet()
+            button.setStyleSheet("background-color: yellow;")
 
-    def drop_event(self, target_cluster, event):
+    def drag_leave_event(self, button, event):
+        button.setStyleSheet(button.original_style)
+
+    def drop_event(self, target_cluster, button, event):
         image_path = event.mimeData().text()
         if image_path:
             self.reassign_image_to_cluster(image_path, target_cluster)
             event.acceptProposedAction()
+            button.setStyleSheet(button.original_style)
 
     def reassign_image_to_cluster(self, image_path, target_cluster):
         # Update the assignments dictionary
