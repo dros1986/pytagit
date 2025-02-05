@@ -15,6 +15,7 @@ import torch.nn.functional as F
 from einops import rearrange
 import cv2
 from OOD4Inclusion import OOD4Inclusion  # Import the OOD4Inclusion class
+from sklearn.ensemble import RandomForestClassifier  # Import Random Forest classifier
 
 
 class DraggableLabel(QtWidgets.QLabel):
@@ -70,6 +71,40 @@ class ThresholdDialog(QtWidgets.QDialog):
 
     def get_threshold(self):
         return self.threshold_input.value()
+
+
+class RandomForestDialog(QtWidgets.QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Random Forest Parameters")
+        self.setModal(True)
+
+        layout = QtWidgets.QVBoxLayout(self)
+
+        # Number of trees input
+        self.n_estimators_input = QtWidgets.QSpinBox()
+        self.n_estimators_input.setRange(1, 1000)
+        self.n_estimators_input.setValue(100)  # Default value
+        layout.addWidget(QtWidgets.QLabel("Number of Trees:"))
+        layout.addWidget(self.n_estimators_input)
+
+        # Max depth input
+        self.max_depth_input = QtWidgets.QSpinBox()
+        self.max_depth_input.setRange(1, 100)
+        self.max_depth_input.setValue(10)  # Default value
+        layout.addWidget(QtWidgets.QLabel("Max Depth:"))
+        layout.addWidget(self.max_depth_input)
+
+        # Run button
+        self.run_button = QtWidgets.QPushButton("Run")
+        self.run_button.clicked.connect(self.accept)
+        layout.addWidget(self.run_button)
+
+    def get_parameters(self):
+        return {
+            "n_estimators": self.n_estimators_input.value(),
+            "max_depth": self.max_depth_input.value(),
+        }
 
 
 class RoofClusteringApp(QtWidgets.QMainWindow):
@@ -161,6 +196,11 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.ood_button.clicked.connect(self.run_ood_classification)
         auto_classify_layout.addWidget(self.ood_button)
         
+        # Random Forest button
+        self.rf_button = QtWidgets.QPushButton("RandomForest")
+        self.rf_button.clicked.connect(self.run_random_forest_classification)
+        auto_classify_layout.addWidget(self.rf_button)
+        
         auto_classify_group.setLayout(auto_classify_layout)
         layout.addWidget(auto_classify_group)
         
@@ -221,6 +261,65 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
                     self.assignments[image_path][self.current_attribute] = self.current_cluster
                 else:
                     self.assignments[image_path][self.current_attribute] = "undefined"
+            
+            # Save updated assignments
+            torch.save({
+                'features': self.features,
+                'image_paths': self.image_paths,
+                'assignments': self.assignments,
+                'selected_images': self.selected_images
+            }, self.features_file)
+            
+            # Refresh the UI
+            self.assign_images_to_clusters()
+            self.display_cluster_images()
+
+    def run_random_forest_classification(self):
+        # Open Random Forest parameters dialog
+        dialog = RandomForestDialog(self)
+        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            
+            # Prepare training data (verified samples)
+            X_train = []
+            y_train = []
+            for cluster, indices in self.clusters[self.current_attribute].items():
+                for idx in indices:
+                    image_path = self.image_paths[idx]
+                    if image_path in self.selected_images.get(self.current_attribute, set()):
+                        X_train.append(self.features[idx].numpy())
+                        y_train.append(cluster)
+            
+            if not X_train:
+                QtWidgets.QMessageBox.warning(self, "Error", "No verified samples found for training.")
+                return
+            
+            # Train Random Forest classifier
+            clf = RandomForestClassifier(
+                n_estimators=params["n_estimators"],
+                max_depth=params["max_depth"],
+                random_state=42
+            )
+            clf.fit(X_train, y_train)
+            
+            # Classify non-selected samples
+            non_selected_indices = []
+            for cluster, indices in self.clusters[self.current_attribute].items():
+                for idx in indices:
+                    image_path = self.image_paths[idx]
+                    if image_path not in self.selected_images.get(self.current_attribute, set()):
+                        non_selected_indices.append(idx)
+            non_selected_features = self.features[non_selected_indices]
+            
+            if non_selected_features.shape[0] > 0:
+                predictions = clf.predict(non_selected_features.numpy())
+                
+                # Assign predictions to non-selected samples
+                for idx, pred in zip(non_selected_indices, predictions):
+                    image_path = self.image_paths[idx]
+                    if image_path not in self.assignments:
+                        self.assignments[image_path] = {}  # Initialize if not present
+                    self.assignments[image_path][self.current_attribute] = pred
             
             # Save updated assignments
             torch.save({
