@@ -120,6 +120,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.image_width = image_width
         self.window_height = window_height
         self.window_width = window_width
+        self.autosave = False
         self.load_schema()
         self.current_attribute = list(self.schema.keys())[0]  # Default to first attribute
         self.current_cluster = "undefined"
@@ -135,7 +136,10 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.init_ui()
 
 
-    def save(self):
+    def save(self, is_button=False):
+        # if not autosaving, save only if button pressed
+        if not self.autosave and not is_button:
+            return
         # Save updated assignments
         torch.save({
             'features': self.features,
@@ -226,6 +230,13 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.image_scroll_area.setWidget(self.image_container)
         self.image_scroll_area.setWidgetResizable(True)
         layout.addWidget(self.image_scroll_area)
+
+        # Add save button
+        self.save_button = QtWidgets.QPushButton("Save")
+        self.save_button.setFixedHeight(50)
+        save_fn = partial(self.save, is_button=True)
+        self.save_button.clicked.connect(save_fn)
+        layout.addWidget(self.save_button)
         
         self.display_cluster_images()
 
