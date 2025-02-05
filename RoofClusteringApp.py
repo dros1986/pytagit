@@ -134,6 +134,16 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         # Initialize UI
         self.init_ui()
 
+
+    def save(self):
+        # Save updated assignments
+        torch.save({
+            'features': self.features,
+            'image_paths': self.image_paths,
+            'assignments': self.assignments,
+            'selected_images': self.selected_images
+        }, self.features_file)
+
     def load_schema(self):
         with open(self.schema_file, 'r') as f:
             self.schema = json.load(f)
@@ -152,12 +162,8 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             self.features = self.extract_features(self.image_paths)
             self.assignments = {}
             self.selected_images = {}  # Initialize empty dictionary for selected images
-            torch.save({
-                'features': self.features,
-                'image_paths': self.image_paths,
-                'assignments': self.assignments,
-                'selected_images': self.selected_images  # Save selected images per attribute
-            }, self.features_file)
+            # save
+            self.save()
     
     def get_all_image_paths(self, folder):
         image_paths = []
@@ -263,12 +269,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
                     self.assignments[image_path][self.current_attribute] = "undefined"
             
             # Save updated assignments
-            torch.save({
-                'features': self.features,
-                'image_paths': self.image_paths,
-                'assignments': self.assignments,
-                'selected_images': self.selected_images
-            }, self.features_file)
+            self.save()
             
             # Refresh the UI
             self.assign_images_to_clusters()
@@ -322,12 +323,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
                     self.assignments[image_path][self.current_attribute] = pred
             
             # Save updated assignments
-            torch.save({
-                'features': self.features,
-                'image_paths': self.image_paths,
-                'assignments': self.assignments,
-                'selected_images': self.selected_images
-            }, self.features_file)
+            self.save()
             
             # Refresh the UI
             self.assign_images_to_clusters()
@@ -375,12 +371,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.toggle_selection(image_path, force_select=True)
         
         # Save the updated assignments and selected images
-        torch.save({
-            'features': self.features,
-            'image_paths': self.image_paths,
-            'assignments': self.assignments,
-            'selected_images': self.selected_images
-        }, self.features_file)
+        self.save()
         
         # Refresh the UI
         self.display_cluster_images()
