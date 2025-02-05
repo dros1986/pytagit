@@ -199,11 +199,13 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         
         # OOD button
         self.ood_button = QtWidgets.QPushButton("OOD")
+        self.ood_button.setFixedHeight(50)
         self.ood_button.clicked.connect(self.run_ood_classification)
         auto_classify_layout.addWidget(self.ood_button)
         
         # Random Forest button
         self.rf_button = QtWidgets.QPushButton("RandomForest")
+        self.rf_button.setFixedHeight(50)
         self.rf_button.clicked.connect(self.run_random_forest_classification)
         auto_classify_layout.addWidget(self.rf_button)
         
@@ -338,6 +340,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.cluster_buttons = {}
         for value in self.schema[self.current_attribute] + ["undefined"]:
             button = QtWidgets.QPushButton(value)
+            button.setFixedHeight(50)
             button.clicked.connect(partial(self.change_cluster, value))
             button.setAcceptDrops(True)  # Enable drop events
             button.dragEnterEvent = self.drag_enter_event
