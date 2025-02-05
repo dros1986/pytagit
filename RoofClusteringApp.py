@@ -61,6 +61,7 @@ class ThresholdDialog(QtWidgets.QDialog):
         self.threshold_input.setRange(0.0, 1.0)
         self.threshold_input.setSingleStep(0.01)
         self.threshold_input.setValue(self.threshold)
+        self.threshold_input.setDecimals(3)
         layout.addWidget(QtWidgets.QLabel("Threshold:"))
         layout.addWidget(self.threshold_input)
 
