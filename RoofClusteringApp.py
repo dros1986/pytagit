@@ -52,14 +52,14 @@ class ThresholdDialog(QtWidgets.QDialog):
         super().__init__(parent)
         self.setWindowTitle("Set Threshold")
         self.setModal(True)
-        self.threshold = 0.5  # Default threshold
+        self.threshold = 0.02  # Default threshold
 
         layout = QtWidgets.QVBoxLayout(self)
 
         # Threshold input
         self.threshold_input = QtWidgets.QDoubleSpinBox()
         self.threshold_input.setRange(0.0, 1.0)
-        self.threshold_input.setSingleStep(0.1)
+        self.threshold_input.setSingleStep(0.01)
         self.threshold_input.setValue(self.threshold)
         layout.addWidget(QtWidgets.QLabel("Threshold:"))
         layout.addWidget(self.threshold_input)
@@ -109,7 +109,7 @@ class RandomForestDialog(QtWidgets.QDialog):
 
 class RoofClusteringApp(QtWidgets.QMainWindow):
     
-    def __init__(self, features_file, root_folder, schema_file, max_samples=500, n_images_per_row=8, image_height=150, image_width=150, window_height=900, window_width=1400):
+    def __init__(self, features_file, root_folder, schema_file, max_samples=1000, n_images_per_row=8, image_height=150, image_width=150, window_height=900, window_width=1400):
         super().__init__()
         self.features_file = features_file
         self.root_folder = root_folder
@@ -167,7 +167,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             self.assignments = {}
             self.selected_images = {}  # Initialize empty dictionary for selected images
             # save
-            self.save()
+            self.save(is_button=True)
     
     def get_all_image_paths(self, folder):
         image_paths = []
@@ -195,6 +195,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.attribute_selector = QtWidgets.QComboBox()
         self.attribute_selector.addItems(self.schema.keys())
         self.attribute_selector.currentTextChanged.connect(self.change_attribute)
+        self.attribute_selector.setStyleSheet("QComboBox { height: 25px; font-size: 16px; }")
         layout.addWidget(self.attribute_selector)
         
         # Auto Classify group box
