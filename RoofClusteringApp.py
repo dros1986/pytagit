@@ -16,6 +16,7 @@ from einops import rearrange
 import cv2
 from OOD4Inclusion import OOD4Inclusion  # Import the OOD4Inclusion class
 from sklearn.ensemble import RandomForestClassifier  # Import Random Forest classifier
+from CNNTrainer import train_cnn, classify_with_cnn  # Import the CNN training function
 
 
 class DraggableLabel(QtWidgets.QLabel):
@@ -105,6 +106,63 @@ class RandomForestDialog(QtWidgets.QDialog):
         return {
             "n_estimators": self.n_estimators_input.value(),
             "max_depth": self.max_depth_input.value(),
+        }
+    
+
+class CNNTrainingDialog(QtWidgets.QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("CNN Training Parameters")
+        self.setModal(True)
+
+        layout = QtWidgets.QVBoxLayout(self)
+
+        # Model selection dropdown
+        self.model_dropdown = QtWidgets.QComboBox()
+        self.model_dropdown.addItems(["ResNet18", "ResNet34", "ResNet50"])
+        layout.addWidget(QtWidgets.QLabel("Select CNN Architecture:"))
+        layout.addWidget(self.model_dropdown)
+
+        # Epochs input
+        self.nepochs_input = QtWidgets.QSpinBox()
+        self.nepochs_input.setRange(1, 1000)
+        self.nepochs_input.setValue(20)  # Default value
+        layout.addWidget(QtWidgets.QLabel("Epochs:"))
+        layout.addWidget(self.nepochs_input)
+
+        # Learning rate input
+        self.learning_rate_input = QtWidgets.QDoubleSpinBox()
+        self.learning_rate_input.setRange(1e-6, 1.0)
+        self.learning_rate_input.setDecimals(6)
+        self.learning_rate_input.setSingleStep(0.0001)
+        self.learning_rate_input.setValue(0.001)  # Default value
+        layout.addWidget(QtWidgets.QLabel("Learning Rate:"))
+        layout.addWidget(self.learning_rate_input)
+
+        # Batch size input
+        self.batch_size_input = QtWidgets.QSpinBox()
+        self.batch_size_input.setRange(1, 1024)
+        self.batch_size_input.setValue(32)  # Default value
+        layout.addWidget(QtWidgets.QLabel("Batch Size:"))
+        layout.addWidget(self.batch_size_input)
+
+        # Pretrained checkbox
+        self.pretrained_checkbox = QtWidgets.QCheckBox("Use Pretrained Weights")
+        self.pretrained_checkbox.setChecked(True)  # Default to checked
+        layout.addWidget(self.pretrained_checkbox)
+
+        # Run button
+        self.run_button = QtWidgets.QPushButton("Run")
+        self.run_button.clicked.connect(self.accept)
+        layout.addWidget(self.run_button)
+
+    def get_parameters(self):
+        return {
+            "model": self.model_dropdown.currentText(),
+            "epochs": self.nepochs_input.value(),
+            "learning_rate": self.learning_rate_input.value(),
+            "batch_size": self.batch_size_input.value(),
+            "pretrained": self.pretrained_checkbox.isChecked()
         }
 
 
@@ -214,6 +272,12 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.rf_button.setFixedHeight(50)
         self.rf_button.clicked.connect(self.run_random_forest_classification)
         auto_classify_layout.addWidget(self.rf_button)
+
+        # CNN Button
+        self.cnn_button = QtWidgets.QPushButton("CNN")
+        self.cnn_button.setFixedHeight(50)
+        self.cnn_button.clicked.connect(self.run_cnn_classification)
+        auto_classify_layout.addWidget(self.cnn_button)
         
         auto_classify_group.setLayout(auto_classify_layout)
         layout.addWidget(auto_classify_group)
@@ -343,6 +407,80 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             # Refresh the UI
             self.assign_images_to_clusters()
             self.display_cluster_images()
+
+
+
+    def run_cnn_classification(self):
+        # Open CNN Training parameters dialog
+        dialog = CNNTrainingDialog(self)
+        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            
+            # Prepare training data (verified samples)
+            X_train = []
+            y_train = []
+            for cluster, indices in self.clusters[self.current_attribute].items():
+                for idx in indices:
+                    image_path = self.image_paths[idx]
+                    if image_path in self.selected_images.get(self.current_attribute, set()):
+                        X_train.append(image_path)
+                        y_train.append(cluster)
+            
+            if not X_train:
+                QtWidgets.QMessageBox.warning(self, "Error", "No verified samples found for training.")
+                return
+            
+            # encode labels
+            le = preprocessing.LabelEncoder()
+            y_train = le.fit_transform(y_train)
+            
+            # Call CNN training function
+            model = train_cnn(
+                image_paths=X_train,
+                labels=y_train,
+                model_name=params["model"],
+                epochs=params["epochs"],
+                learning_rate=params["learning_rate"],
+                batch_size=params["batch_size"],
+                num_classes=len(set(y_train)),  # Number of unique labels
+                pretrained=params["pretrained"]
+            )
+
+            # print(model)
+
+            # Notify the user that training is complete
+            QtWidgets.QMessageBox.information(self, "Training Complete", "CNN training has been successfully completed.")
+
+            # Classify non-selected samples
+            non_selected_indices = []
+            non_selected_images = []
+            for cluster, indices in self.clusters[self.current_attribute].items():
+                for idx in indices:
+                    image_path = self.image_paths[idx]
+                    if image_path not in self.selected_images.get(self.current_attribute, set()):
+                        non_selected_indices.append(idx)
+                        non_selected_images.append(image_path)
+            # non_selected_features = self.features[non_selected_indices]
+            
+            if len(non_selected_images) > 0:
+                predictions = classify_with_cnn(non_selected_images, model)
+                predictions = le.inverse_transform(predictions)
+                
+                # Assign predictions to non-selected samples
+                for idx, pred in zip(non_selected_indices, predictions):
+                    image_path = self.image_paths[idx]
+                    if image_path not in self.assignments:
+                        self.assignments[image_path] = {}  # Initialize if not present
+                    self.assignments[image_path][self.current_attribute] = pred
+            
+            # Save updated assignments
+            self.save()
+
+            # Refresh the UI
+            self.assign_images_to_clusters()
+            self.display_cluster_images()
+
+
 
     def update_cluster_buttons(self):
         # Clear existing buttons

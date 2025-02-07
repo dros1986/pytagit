@@ -9,7 +9,7 @@ import pytorch_lightning as pl
 from torchvision import transforms, models
 from pytorch_lightning.callbacks import RichProgressBar, ModelCheckpoint
 from PIL import Image
-from tqdm import tqdm
+from tqdm.rich import tqdm
 
 
 class ImageDataset(torch.utils.data.Dataset):
@@ -75,7 +75,7 @@ class CNNTrainer(pl.LightningModule):
     
 
 
-def train_cnn(image_paths, labels, model_name, learning_rate, batch_size, num_classes, pretrained=True):
+def train_cnn(image_paths, labels, model_name, epochs, learning_rate, batch_size, num_classes, pretrained=True):
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
@@ -87,7 +87,7 @@ def train_cnn(image_paths, labels, model_name, learning_rate, batch_size, num_cl
     model = CNNTrainer(model_name, learning_rate, batch_size, pretrained, num_classes)
     
     trainer = pl.Trainer(
-        max_epochs=10,
+        max_epochs=epochs,
         callbacks=[RichProgressBar(), ModelCheckpoint(monitor='val_loss')],
         accelerator="auto"
     )
@@ -96,3 +96,28 @@ def train_cnn(image_paths, labels, model_name, learning_rate, batch_size, num_cl
 
     # return the model
     return model
+
+
+def classify_with_cnn(image_paths, model):
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+    
+    model.eval()
+    # predictions = {}
+    predictions = []
+    
+    for image_path in tqdm(image_paths):
+        image = Image.open(image_path).convert("RGB")
+        image = transform(image).unsqueeze(0)  # Add batch dimension
+        
+        with torch.no_grad():
+            output = model(image)
+            pred_label = output.argmax(dim=1).item()
+            # predictions[image_path] = pred_label
+            predictions.append(pred_label)
+    
+    return predictions
+
