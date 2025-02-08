@@ -115,7 +115,7 @@ def transform_fun(train, sz, image):
         # in this case, we want to apply only geometric transforms
         trans = A.Compose([
             A.RandomRotate90(p=0.3),
-            A.Flip(p=0.3),
+            # A.Flip(p=0.3),
             A.Transpose(p=0.3),
             A.GaussNoise(p=0.1),
             A.OneOf([
@@ -168,7 +168,7 @@ def train_cnn(image_paths, labels, model_name, epochs, learning_rate, batch_size
     
     trainer = pl.Trainer(
         max_epochs=epochs,
-        callbacks=[RichProgressBar(), ModelCheckpoint(monitor='val_loss')],
+        callbacks=[RichProgressBar(), ModelCheckpoint(monitor='train_loss', mode='min')],
         accelerator="auto"
     )
     
@@ -178,7 +178,7 @@ def train_cnn(image_paths, labels, model_name, epochs, learning_rate, batch_size
     return model
 
 
-def classify_with_cnn(image_paths, model):
+def classify_with_cnn(image_paths, model, threshold, id_undefined_class):
     # transform = transforms.Compose([
     #     transforms.Resize((224, 224)),
     #     transforms.ToTensor(),
@@ -196,9 +196,16 @@ def classify_with_cnn(image_paths, model):
         
         with torch.no_grad():
             output = model(image)
-            pred_label = output.argmax(dim=1).item()
+            output = F.softmax(output)
+            # pred_label = output.argmax(dim=1).item()
+            prob, pred_label = output.max(dim=1)
+            prob = prob.item()
+            pred_label = pred_label.item()
             # predictions[image_path] = pred_label
-            predictions.append(pred_label)
+            if prob >= threshold:
+                predictions.append(pred_label)
+            else:
+                predictions.append(id_undefined_class)
     
     return predictions
 

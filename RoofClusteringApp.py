@@ -123,6 +123,15 @@ class CNNTrainingDialog(QtWidgets.QDialog):
         layout.addWidget(QtWidgets.QLabel("Select CNN Architecture:"))
         layout.addWidget(self.model_dropdown)
 
+        # accept threshold input
+        self.accept_threshold_input = QtWidgets.QDoubleSpinBox()
+        self.accept_threshold_input.setRange(1e-6, 1.0)
+        self.accept_threshold_input.setDecimals(2)
+        self.accept_threshold_input.setSingleStep(0.01)
+        self.accept_threshold_input.setValue(0.90)  # Default value
+        layout.addWidget(QtWidgets.QLabel("Accept threshold:"))
+        layout.addWidget(self.accept_threshold_input)
+
         # Epochs input
         self.nepochs_input = QtWidgets.QSpinBox()
         self.nepochs_input.setRange(1, 1000)
@@ -159,6 +168,7 @@ class CNNTrainingDialog(QtWidgets.QDialog):
     def get_parameters(self):
         return {
             "model": self.model_dropdown.currentText(),
+            "threshold": self.accept_threshold_input.value(),
             "epochs": self.nepochs_input.value(),
             "learning_rate": self.learning_rate_input.value(),
             "batch_size": self.batch_size_input.value(),
@@ -433,6 +443,9 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             # encode labels
             le = preprocessing.LabelEncoder()
             y_train = le.fit_transform(y_train)
+
+            # find class id of undefined
+            id_undefined_class = int(le.transform(['undefined'])[0])
             
             # Call CNN training function
             model = train_cnn(
@@ -463,7 +476,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             # non_selected_features = self.features[non_selected_indices]
             
             if len(non_selected_images) > 0:
-                predictions = classify_with_cnn(non_selected_images, model)
+                predictions = classify_with_cnn(non_selected_images, model, threshold=params["threshold"], id_undefined_class=id_undefined_class)
                 predictions = le.inverse_transform(predictions)
                 
                 # Assign predictions to non-selected samples
