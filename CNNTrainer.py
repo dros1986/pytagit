@@ -18,7 +18,7 @@ import albumentations as A
 
 
 class ImageDataset(torch.utils.data.Dataset):
-    def __init__(self, image_paths, labels, transform=None):
+    def __init__(self, image_paths, labels=None, transform=None):
         self.image_paths = image_paths
         self.labels = labels
         self.transform = transform
@@ -30,7 +30,7 @@ class ImageDataset(torch.utils.data.Dataset):
         image = Image.open(self.image_paths[idx]).convert("RGB")
         if self.transform:
             image = self.transform(image=image)
-        label = self.labels[idx]
+        label = self.labels[idx] if self.labels is not None else 0
         return image, label
 
 
@@ -178,7 +178,7 @@ def train_cnn(image_paths, labels, model_name, epochs, learning_rate, batch_size
     return model
 
 
-def classify_with_cnn(image_paths, model, threshold, id_undefined_class):
+def classify_with_cnn(image_paths, model, threshold, id_undefined_class, batch_size=32):
     # transform = transforms.Compose([
     #     transforms.Resize((224, 224)),
     #     transforms.ToTensor(),
@@ -189,23 +189,21 @@ def classify_with_cnn(image_paths, model, threshold, id_undefined_class):
     model.eval()
     # predictions = {}
     predictions = []
-    
-    for image_path in tqdm(image_paths):
-        image = Image.open(image_path).convert("RGB")
-        image = transform(image=image).unsqueeze(0)  # Add batch dimension
-        
+
+    dataset = ImageDataset(image_paths, None, transform)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False)
+
+    for batch in tqdm(dataloader):
+        images, labels = batch
         with torch.no_grad():
-            output = model(image)
+            output = model(images)
             output = F.softmax(output)
-            # pred_label = output.argmax(dim=1).item()
             prob, pred_label = output.max(dim=1)
-            prob = prob.item()
-            pred_label = pred_label.item()
-            # predictions[image_path] = pred_label
-            if prob >= threshold:
-                predictions.append(pred_label)
-            else:
-                predictions.append(id_undefined_class)
+            pred_label[prob < threshold] = id_undefined_class
+            predictions.append(pred_label)
+
+    predictions = torch.cat(predictions)
+
     
     return predictions
 
