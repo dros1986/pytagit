@@ -7,9 +7,9 @@ class DraggableLabel(QtWidgets.QLabel):
     def __init__(self, image_path, main_window, parent=None):
         super().__init__(parent)
         self.image_path = image_path
-        self.main_window = main_window  # Reference to the main application window
+        self.main_window = main_window
         self.setAcceptDrops(True)
-        self.setStyleSheet("border: 2px solid transparent;")  # Default border (transparent)
+        self.setStyleSheet("border: 2px solid transparent;")
         self.update_selection_state()
 
     def mousePressEvent(self, event):
@@ -17,12 +17,39 @@ class DraggableLabel(QtWidgets.QLabel):
             self.main_window.toggle_selection(self.image_path)
             self.update_selection_state()
 
+            # Start drag event
+            drag = QtGui.QDrag(self)
+            mime_data = QtCore.QMimeData()
+            mime_data.setText(self.image_path)
+            drag.setMimeData(mime_data)
+
+            drag.exec(QtCore.Qt.DropAction.MoveAction)
+
     def update_selection_state(self):
         """Update the border based on selection status"""
         if self.image_path in self.main_window.selected_images:
-            self.setStyleSheet("border: 2px solid red;")  # Red border for selected images
+            self.setStyleSheet("border: 2px solid red;")
         else:
-            self.setStyleSheet("border: 2px solid transparent;")  # Transparent border for unselected images
+            self.setStyleSheet("border: 2px solid transparent;")
+
+
+class TrashButton(QtWidgets.QPushButton):
+    """Trash button where images can be dragged to delete them."""
+    
+    def __init__(self, main_window):
+        super().__init__("Cestino 🗑️")
+        self.main_window = main_window
+        self.setAcceptDrops(True)
+        self.setStyleSheet(
+            "background-color: red; color: white; font-size: 18px; padding: 10px; border-radius: 10px;"
+        )
+
+    def dragEnterEvent(self, event):
+        event.accept()
+
+    def dropEvent(self, event):
+        image_path = event.mimeData().text()
+        self.main_window.remove_image(image_path)
 
 
 class ImageGallery(QtWidgets.QMainWindow):
@@ -60,6 +87,10 @@ class ImageGallery(QtWidgets.QMainWindow):
         self.setCentralWidget(central_widget)
         layout = QtWidgets.QVBoxLayout(central_widget)
 
+        # "Cestino" (Trash) button
+        self.trash_button = TrashButton(self)
+        layout.addWidget(self.trash_button, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+
         # Image display area
         self.image_scroll_area = QtWidgets.QScrollArea()
         self.image_container = QtWidgets.QWidget()
@@ -82,6 +113,14 @@ class ImageGallery(QtWidgets.QMainWindow):
         # Update only the specific image label
         if image_path in self.image_labels:
             self.image_labels[image_path].update_selection_state()
+
+    def remove_image(self, image_path):
+        """Remove an image from the gallery when dropped into the 'Cestino'"""
+        if image_path in self.image_paths:
+            self.image_paths.remove(image_path)  # Remove from the list
+            label = self.image_labels.pop(image_path, None)  # Remove from stored references
+            if label:
+                label.deleteLater()  # Remove the widget
 
     def display_images(self):
         """Load and display images efficiently"""
