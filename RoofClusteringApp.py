@@ -15,9 +15,9 @@ import torch.nn.functional as F
 from einops import rearrange
 import cv2
 from OOD4Inclusion import OOD4Inclusion  # Import the OOD4Inclusion class
-from sklearn.ensemble import RandomForestClassifier  # Import Random Forest classifier
+# from sklearn.ensemble import RandomForestClassifier  # Import Random Forest classifier
 from CNNTrainer import train_cnn, classify_with_cnn  # Import the CNN training function
-from Helpers import ThresholdDialog, RandomForestDialog, CNNTrainingDialog
+from Helpers import ThresholdDialog, CNNTrainingDialog, RFClassifier
 
 
 class DraggableLabel(QtWidgets.QLabel):
@@ -152,6 +152,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         auto_classify_layout.addWidget(self.ood_button)
         
         # Random Forest button
+        self.rf_trainer = RFClassifier()
         self.rf_button = QtWidgets.QPushButton("RandomForest")
         self.rf_button.setFixedHeight(50)
         self.rf_button.clicked.connect(self.run_random_forest_classification)
@@ -196,6 +197,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.assign_images_to_clusters()
         self.update_cluster_buttons()  # Update the cluster buttons
         self.display_cluster_images()  # Display images for the new attribute and cluster
+    
 
     def run_ood_classification(self):
         # Open threshold dialog
@@ -238,59 +240,90 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             self.assign_images_to_clusters()
             self.display_cluster_images()
 
+
+    def get_training_features(self):    
+        # Prepare training data (verified samples)
+        X_train = []
+        y_train = []
+        filenames = []
+        for cluster, indices in self.clusters[self.current_attribute].items():
+            for idx in indices:
+                image_path = self.image_paths[idx]
+                if image_path in self.selected_images.get(self.current_attribute, set()):
+                    X_train.append(self.features[idx].numpy())
+                    y_train.append(cluster)
+                    filenames.append(image_path)
+        # if no samples, return
+        if not X_train:
+            QtWidgets.QMessageBox.warning(self, "Error", "No verified samples found for training.")
+            return
+        # concatenate
+        X_train = np.vstack(X_train)
+        # encode labels
+        le = preprocessing.LabelEncoder()
+        unique_class_names = list(set(y_train + ['undefined']))
+        le.fit(unique_class_names)
+        y_train = le.transform(y_train)
+        # get number of classes
+        num_classes = len(unique_class_names)
+        # find class id of undefined
+        id_undefined_class = int(le.transform(['undefined'])[0])
+        # return
+        return X_train, y_train, filenames, num_classes, id_undefined_class, le
+    
+
+
+    def get_non_selected_features(self):
+        # Classify non-selected samples
+        non_selected_indices = []
+        non_selected_filenames = []
+        for cluster, indices in self.clusters[self.current_attribute].items():
+            for idx in indices:
+                image_path = self.image_paths[idx]
+                if image_path not in self.selected_images.get(self.current_attribute, set()):
+                    non_selected_indices.append(idx)
+                    non_selected_filenames.append(image_path)
+        non_selected_features = self.features[non_selected_indices]
+
+        # return all
+        return non_selected_indices, non_selected_filenames, non_selected_features
+
+
+
     def run_random_forest_classification(self):
-        # Open Random Forest parameters dialog
-        dialog = RandomForestDialog(self)
-        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
-            params = dialog.get_parameters()
-            
-            # Prepare training data (verified samples)
-            X_train = []
-            y_train = []
-            for cluster, indices in self.clusters[self.current_attribute].items():
-                for idx in indices:
-                    image_path = self.image_paths[idx]
-                    if image_path in self.selected_images.get(self.current_attribute, set()):
-                        X_train.append(self.features[idx].numpy())
-                        y_train.append(cluster)
-            
-            if not X_train:
-                QtWidgets.QMessageBox.warning(self, "Error", "No verified samples found for training.")
-                return
-            
-            # Train Random Forest classifier
-            clf = RandomForestClassifier(
-                n_estimators=params["n_estimators"],
-                max_depth=params["max_depth"],
-                random_state=42
-            )
-            clf.fit(X_train, y_train)
-            
-            # Classify non-selected samples
-            non_selected_indices = []
-            for cluster, indices in self.clusters[self.current_attribute].items():
-                for idx in indices:
-                    image_path = self.image_paths[idx]
-                    if image_path not in self.selected_images.get(self.current_attribute, set()):
-                        non_selected_indices.append(idx)
-            non_selected_features = self.features[non_selected_indices]
-            
-            if non_selected_features.shape[0] > 0:
-                predictions = clf.predict(non_selected_features.numpy())
-                
-                # Assign predictions to non-selected samples
-                for idx, pred in zip(non_selected_indices, predictions):
-                    image_path = self.image_paths[idx]
-                    if image_path not in self.assignments:
-                        self.assignments[image_path] = {}  # Initialize if not present
-                    self.assignments[image_path][self.current_attribute] = pred
-            
-            # Save updated assignments
-            self.save()
-            
-            # Refresh the UI
-            self.assign_images_to_clusters()
-            self.display_cluster_images()
+        # Open dialog
+        dialog = self.rf_trainer.get_dialog(self)
+        # if accepted
+        if not dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            return
+        # get parameters
+        params = dialog.get_parameters()
+        # get train features
+        X_train, y_train, filenames, num_classes, id_undefined_class, le = self.get_training_features()
+
+        # train
+        training_performed = self.rf_trainer.train(params, X_train, y_train, filenames, id_undefined_class, num_classes)
+        if not training_performed: return
+        # get non selected features
+        non_selected_indices, non_selected_filenames, non_selected_features = self.get_non_selected_features()
+        # classify them
+        predictions = self.rf_trainer.classify(params, non_selected_filenames, non_selected_features, id_undefined_class)
+        # from label ids to label names
+        predictions = [str(v) for v in le.inverse_transform(predictions)]
+
+        # Assign predictions to non-selected samples
+        for idx, pred in zip(non_selected_indices, predictions):
+            image_path = self.image_paths[idx]
+            if image_path not in self.assignments:
+                self.assignments[image_path] = {}  # Initialize if not present
+            self.assignments[image_path][self.current_attribute] = pred
+
+        # Save updated assignments
+        self.save()
+        
+        # Refresh the UI
+        self.assign_images_to_clusters()
+        self.display_cluster_images()
 
 
 

@@ -1,4 +1,8 @@
+import numpy as np
+from random import Random
 from PyQt6 import QtWidgets, QtGui, QtCore
+from sklearn import preprocessing
+from sklearn.ensemble import RandomForestClassifier
 
 
 
@@ -128,3 +132,70 @@ class CNNTrainingDialog(QtWidgets.QDialog):
             "batch_size": self.batch_size_input.value(),
             "pretrained": self.pretrained_checkbox.isChecked()
         }
+    
+
+
+
+class MultiClassClassifier(object):
+
+    def get_name(self):
+        raise ValueError('You must overload the class.')
+
+    def get_dialog(self, parent):
+        raise ValueError('You must overload the class.')
+    
+    def train(self, params, X_train, y_train, filenames, id_undefined_class, num_classes):
+        raise ValueError('You must overload the class.')
+    
+    def classify(self, params, filenames, features, id_undefined_class):
+        raise ValueError('You must overload the class.')
+    
+    
+
+
+class RFClassifier(MultiClassClassifier):
+
+    def get_name(self):
+        return 'Random Forest'
+
+    def get_dialog(self, parent=None):
+        return RandomForestDialog(parent)
+    
+
+    def train(self, params, X_train, y_train, filenames, id_undefined_class, num_classes):
+        # Train Random Forest classifier
+        self.clf = RandomForestClassifier(
+            n_estimators=params["n_estimators"],
+            max_depth=params["max_depth"],
+            random_state=42
+        )
+        self.clf.fit(X_train, y_train)
+        return True
+
+
+    def classify(self, params, filenames, features, id_undefined_class):
+        # perform classification
+        predictions = self.clf.predict(features.numpy())
+        # return them
+        return predictions
+    
+
+
+
+if __name__ == '__main__':
+    import sys
+    app = QtWidgets.QApplication(sys.argv)
+
+    # define classifiers
+    classifiers = [RFClassifier()]
+
+    for cur_classifier in classifiers:
+        # get dialog
+        dialog = cur_classifier.get_dialog()
+        # if accepted
+        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            # get parameters
+            params = dialog.get_parameters()
+            # print them
+            print(params)
+
