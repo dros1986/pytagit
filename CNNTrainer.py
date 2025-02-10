@@ -42,11 +42,11 @@ class CNNTrainer(pl.LightningModule):
         self.batch_size = batch_size
         
         if model_name == "ResNet18":
-            self.model = models.resnet18(pretrained=pretrained)
+            self.model = models.resnet18(models.ResNet18_Weights.DEFAULT if pretrained else None)
         elif model_name == "ResNet34":
-            self.model = models.resnet34(pretrained=pretrained)
+            self.model = models.resnet34(models.ResNet34_Weights.DEFAULT if pretrained else None)
         elif model_name == "ResNet50":
-            self.model = models.resnet50(pretrained=pretrained)
+            self.model = models.resnet50(models.ResNet50_Weights.DEFAULT if pretrained else None)
         else:
             raise ValueError("Invalid model name")
         
@@ -128,14 +128,16 @@ def transform_fun(train, sz, image):
                 A.GridDistortion(p=.1),
             ], p=0.2),
             A.LongestMaxSize(max_size=sz),
-            A.PadIfNeeded(min_height=sz, min_width=sz, border_mode=cv2.BORDER_CONSTANT, value=.0, mask_value=.0),
+            # A.PadIfNeeded(min_height=sz, min_width=sz, border_mode=cv2.BORDER_CONSTANT, value=.0, mask_value=.0),
+            A.PadIfNeeded(min_height=sz, min_width=sz, border_mode=cv2.BORDER_CONSTANT, fill=.0, fill_mask=.0),
             A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225), max_pixel_value=255.0),
         ])
     else:
         # define transform
         trans = A.Compose([
                 A.LongestMaxSize(max_size=sz),
-                A.PadIfNeeded(min_height=sz, min_width=sz, border_mode=cv2.BORDER_CONSTANT, value=.0, mask_value=.0),
+                # A.PadIfNeeded(min_height=sz, min_width=sz, border_mode=cv2.BORDER_CONSTANT, value=.0, mask_value=.0),
+                A.PadIfNeeded(min_height=sz, min_width=sz, border_mode=cv2.BORDER_CONSTANT, fill=.0, fill_mask=.0),
                 A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225), max_pixel_value=255.0),
         ])
 
@@ -148,62 +150,4 @@ def transform_fun(train, sz, image):
     image_t = torch.tensor(image_t, dtype=torch.float32)
     # return
     return image_t
-
-
-
-    
-
-
-def train_cnn(image_paths, labels, model_name, epochs, learning_rate, batch_size, num_classes, pretrained=True):
-    # transform = transforms.Compose([
-    #     transforms.Resize((224, 224)),
-    #     transforms.ToTensor(),
-    #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    # ])
-    transform = partial(transform_fun, train=True, sz=256)
-    dataset = ImageDataset(image_paths, labels, transform)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    
-    model = CNNTrainer(model_name, learning_rate, batch_size, pretrained, num_classes)
-    
-    trainer = pl.Trainer(
-        max_epochs=epochs,
-        callbacks=[RichProgressBar(), ModelCheckpoint(monitor='train_loss', mode='min')],
-        accelerator="auto"
-    )
-    
-    trainer.fit(model, dataloader)
-
-    # return the model
-    return model
-
-
-def classify_with_cnn(image_paths, model, threshold, id_undefined_class, batch_size=32):
-    # transform = transforms.Compose([
-    #     transforms.Resize((224, 224)),
-    #     transforms.ToTensor(),
-    #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    # ])
-    transform = partial(transform_fun, train=False, sz=256)
-    
-    model.eval()
-    # predictions = {}
-    predictions = []
-
-    dataset = ImageDataset(image_paths, None, transform)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False)
-
-    for batch in tqdm(dataloader):
-        images, labels = batch
-        with torch.no_grad():
-            output = model(images)
-            output = F.softmax(output)
-            prob, pred_label = output.max(dim=1)
-            pred_label[prob < threshold] = id_undefined_class
-            predictions.append(pred_label)
-
-    predictions = torch.cat(predictions)
-
-    
-    return predictions
 

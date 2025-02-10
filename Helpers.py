@@ -1,9 +1,18 @@
 import numpy as np
 from random import Random
+from functools import partial
 from PyQt6 import QtWidgets, QtGui, QtCore
 from sklearn import preprocessing
 from sklearn.ensemble import RandomForestClassifier
-
+from CNNTrainer import CNNTrainer, ImageDataset, transform_fun
+import albumentations as A
+from PIL import Image
+from einops import rearrange
+import torch
+import torch.nn.functional as F
+import pytorch_lightning as pl
+from pytorch_lightning.callbacks import RichProgressBar, ModelCheckpoint
+from tqdm.rich import tqdm
 
 
 class ThresholdDialog(QtWidgets.QDialog):
@@ -182,12 +191,77 @@ class RFClassifier(MultiClassClassifier):
 
 
 
+class CNNClassifier(MultiClassClassifier):
+
+    def __init__(self):
+        super(CNNClassifier, self).__init__()
+        self.model = None
+
+
+    def get_name(self):
+        return 'CNN'
+
+    def get_dialog(self, parent=None):
+        return CNNTrainingDialog(parent)
+    
+
+    def train(self, params, X_train, y_train, filenames, id_undefined_class, num_classes):
+        
+        # define transformations and dataloader
+        transform = partial(transform_fun, train=True, sz=256)
+        dataset = ImageDataset(filenames, y_train, transform)
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=params['batch_size'], shuffle=True)
+        
+        # define model
+        self.model = CNNTrainer(params['model'], params['learning_rate'], params['batch_size'], params['pretrained'], num_classes)
+        
+        trainer = pl.Trainer(
+            max_epochs=params['epochs'],
+            callbacks=[RichProgressBar(), ModelCheckpoint(monitor='train_loss', mode='min')],
+            accelerator="auto"
+        )
+        
+        trainer.fit(self.model, dataloader)
+
+        # return true as training has been computed
+        return True
+
+
+    
+    def classify(self, params, filenames, features, id_undefined_class):
+        # define transforms
+        transform = partial(transform_fun, train=False, sz=256)
+        # init model and output
+        self.model.eval()
+        predictions = []
+        # create dataloader
+        dataset = ImageDataset(filenames, None, transform)
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=params['batch_size'], shuffle=False)
+
+        for batch in tqdm(dataloader):
+            images, labels = batch
+            with torch.no_grad():
+                output = self.model(images)
+                output = F.softmax(output, dim=0)
+                prob, pred_label = output.max(dim=1)
+                pred_label[prob < params['threshold']] = id_undefined_class
+                predictions.append(pred_label)
+
+        predictions = torch.cat(predictions)
+
+        
+        return predictions
+    
+
+
+
+
 if __name__ == '__main__':
     import sys
     app = QtWidgets.QApplication(sys.argv)
 
     # define classifiers
-    classifiers = [RFClassifier()]
+    classifiers = [RFClassifier(), CNNClassifier()]
 
     for cur_classifier in classifiers:
         # get dialog

@@ -15,9 +15,7 @@ import torch.nn.functional as F
 from einops import rearrange
 import cv2
 from OOD4Inclusion import OOD4Inclusion  # Import the OOD4Inclusion class
-# from sklearn.ensemble import RandomForestClassifier  # Import Random Forest classifier
-from CNNTrainer import train_cnn, classify_with_cnn  # Import the CNN training function
-from Helpers import ThresholdDialog, CNNTrainingDialog, RFClassifier
+from Helpers import ThresholdDialog, RFClassifier, CNNClassifier
 
 
 class DraggableLabel(QtWidgets.QLabel):
@@ -152,7 +150,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         auto_classify_layout.addWidget(self.ood_button)
 
         # define classifiers
-        self.classifiers = [RFClassifier()]
+        self.classifiers = [RFClassifier(), CNNClassifier()]
 
         # for each classifier
         for cur_classifier in self.classifiers:
@@ -166,11 +164,6 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             # add to layout
             auto_classify_layout.addWidget(cur_button)
 
-        # CNN Button
-        self.cnn_button = QtWidgets.QPushButton("CNN")
-        self.cnn_button.setFixedHeight(50)
-        self.cnn_button.clicked.connect(self.run_cnn_classification)
-        auto_classify_layout.addWidget(self.cnn_button)
         
         auto_classify_group.setLayout(auto_classify_layout)
         layout.addWidget(auto_classify_group)
@@ -310,7 +303,9 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         X_train, y_train, filenames, num_classes, id_undefined_class, le = self.get_training_features()
 
         # train
+        self.setVisible(False)
         training_performed = trainer.train(params, X_train, y_train, filenames, id_undefined_class, num_classes)
+        self.setVisible(True)
         if not training_performed: return
         # get non selected features
         non_selected_indices, non_selected_filenames, non_selected_features = self.get_non_selected_features()
@@ -332,84 +327,6 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         # Refresh the UI
         self.assign_images_to_clusters()
         self.display_cluster_images()
-
-
-
-    def run_cnn_classification(self):
-        # Open CNN Training parameters dialog
-        dialog = CNNTrainingDialog(self)
-        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
-            params = dialog.get_parameters()
-            
-            # Prepare training data (verified samples)
-            X_train = []
-            y_train = []
-            for cluster, indices in self.clusters[self.current_attribute].items():
-                for idx in indices:
-                    image_path = self.image_paths[idx]
-                    if image_path in self.selected_images.get(self.current_attribute, set()):
-                        X_train.append(image_path)
-                        y_train.append(cluster)
-            
-            if not X_train:
-                QtWidgets.QMessageBox.warning(self, "Error", "No verified samples found for training.")
-                return
-            
-            # encode labels
-            le = preprocessing.LabelEncoder()
-            # y_train = le.fit_transform(y_train)
-            unique_class_names = list(set(y_train + ['undefined']))
-            le.fit(unique_class_names)
-            y_train = le.transform(y_train)
-
-            # find class id of undefined
-            id_undefined_class = int(le.transform(['undefined'])[0])
-            
-            # Call CNN training function
-            model = train_cnn(
-                image_paths=X_train,
-                labels=y_train,
-                model_name=params["model"],
-                epochs=params["epochs"],
-                learning_rate=params["learning_rate"],
-                batch_size=params["batch_size"],
-                num_classes=len(unique_class_names),  # Number of unique labels
-                pretrained=params["pretrained"]
-            )
-
-            # print(model)
-
-            # Notify the user that training is complete
-            # QtWidgets.QMessageBox.information(self, "Training Complete", "CNN training has been successfully completed.")
-
-            # Classify non-selected samples
-            non_selected_indices = []
-            non_selected_images = []
-            for cluster, indices in self.clusters[self.current_attribute].items():
-                for idx in indices:
-                    image_path = self.image_paths[idx]
-                    if image_path not in self.selected_images.get(self.current_attribute, set()):
-                        non_selected_indices.append(idx)
-                        non_selected_images.append(image_path)
-            # non_selected_features = self.features[non_selected_indices]
-            
-            if len(non_selected_images) > 0:
-                predictions = classify_with_cnn(non_selected_images, model, threshold=params["threshold"], id_undefined_class=id_undefined_class)
-                predictions = le.inverse_transform(predictions)
-                
-                # Assign predictions to non-selected samples
-                for idx, pred in zip(non_selected_indices, predictions):
-                    image_path = self.image_paths[idx]
-                    if image_path not in self.assignments:
-                        self.assignments[image_path] = {}  # Initialize if not present
-                    self.assignments[image_path][self.current_attribute] = pred
-            
-            # Save updated assignments
-            self.save()
-
-            # Refresh the UI
-            self.assign_images_to_clusters()
-            self.display_cluster_images()
 
 
 
