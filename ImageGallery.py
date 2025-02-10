@@ -56,7 +56,7 @@ class ImageGallery(QtWidgets.QMainWindow):
     def __init__(self, root_folder):
         super().__init__()
         self.root_folder = root_folder
-        self.max_samples = 1000
+        self.max_samples = 10000  # Optimized for large datasets
         self.n_images_per_row = 8
         self.image_height = 150
         self.image_width = 150
@@ -100,8 +100,8 @@ class ImageGallery(QtWidgets.QMainWindow):
         self.image_scroll_area.setWidgetResizable(True)
         layout.addWidget(self.image_scroll_area)
 
-        # Display images
-        self.rearrange_images()
+        # Display images efficiently
+        self.load_images()
 
     def toggle_selection(self, image_path):
         """Toggle selection of an image and update its UI directly"""
@@ -120,20 +120,34 @@ class ImageGallery(QtWidgets.QMainWindow):
             self.image_paths.remove(image_path)  # Remove from the list
             label = self.image_labels.pop(image_path, None)  # Remove from stored references
             if label:
-                label.deleteLater()  # Remove the widget
+                self.image_layout.removeWidget(label)  # Remove from layout
+                label.deleteLater()  # Delete widget safely
 
-        # Rebuild the layout to shift images
-        self.rearrange_images()
+        # Shift remaining images without full refresh
+        self.shift_images()
 
-    def rearrange_images(self):
-        """Repopulate the grid layout to remove gaps after an image is deleted."""
-        # Clear the grid
-        for i in reversed(range(self.image_layout.count())):
-            self.image_layout.itemAt(i).widget().deleteLater()
+    def shift_images(self):
+        """Dynamically reorganize the grid to avoid layout gaps."""
+        items = []
+        for i in range(self.image_layout.count()):
+            item = self.image_layout.itemAt(i)
+            if item is not None:
+                widget = item.widget()
+                if widget:
+                    items.append(widget)
 
-        self.image_labels.clear()
+        # Clear the layout without deleting widgets
+        while self.image_layout.count():
+            self.image_layout.takeAt(0)
 
-        # Re-add all remaining images
+        # Re-add widgets in the correct order
+        for idx, widget in enumerate(items):
+            row = idx // self.n_images_per_row
+            col = idx % self.n_images_per_row
+            self.image_layout.addWidget(widget, row, col)
+
+    def load_images(self):
+        """Load images initially without full redraw."""
         for idx, image_path in enumerate(self.image_paths):
             pixmap = QtGui.QPixmap(image_path).scaled(self.image_width, self.image_height, QtCore.Qt.AspectRatioMode.KeepAspectRatio)
             label = DraggableLabel(image_path, self)
