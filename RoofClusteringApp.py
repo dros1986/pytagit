@@ -150,13 +150,21 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.ood_button.setFixedHeight(50)
         self.ood_button.clicked.connect(self.run_ood_classification)
         auto_classify_layout.addWidget(self.ood_button)
-        
-        # Random Forest button
-        self.rf_trainer = RFClassifier()
-        self.rf_button = QtWidgets.QPushButton("RandomForest")
-        self.rf_button.setFixedHeight(50)
-        self.rf_button.clicked.connect(self.run_random_forest_classification)
-        auto_classify_layout.addWidget(self.rf_button)
+
+        # define classifiers
+        self.classifiers = [RFClassifier()]
+
+        # for each classifier
+        for cur_classifier in self.classifiers:
+            # create button
+            cur_button = QtWidgets.QPushButton(cur_classifier.get_name())
+            cur_button.setFixedHeight(50)
+            # create partial function
+            partial_fun = partial(self.run_classification, trainer=cur_classifier)
+            # connect button to partial function
+            cur_button.clicked.connect(partial_fun)
+            # add to layout
+            auto_classify_layout.addWidget(cur_button)
 
         # CNN Button
         self.cnn_button = QtWidgets.QPushButton("CNN")
@@ -290,9 +298,9 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
 
 
 
-    def run_random_forest_classification(self):
+    def run_classification(self, trainer):
         # Open dialog
-        dialog = self.rf_trainer.get_dialog(self)
+        dialog = trainer.get_dialog(self)
         # if accepted
         if not dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
             return
@@ -302,12 +310,12 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         X_train, y_train, filenames, num_classes, id_undefined_class, le = self.get_training_features()
 
         # train
-        training_performed = self.rf_trainer.train(params, X_train, y_train, filenames, id_undefined_class, num_classes)
+        training_performed = trainer.train(params, X_train, y_train, filenames, id_undefined_class, num_classes)
         if not training_performed: return
         # get non selected features
         non_selected_indices, non_selected_filenames, non_selected_features = self.get_non_selected_features()
         # classify them
-        predictions = self.rf_trainer.classify(params, non_selected_filenames, non_selected_features, id_undefined_class)
+        predictions = trainer.classify(params, non_selected_filenames, non_selected_features, id_undefined_class)
         # from label ids to label names
         predictions = [str(v) for v in le.inverse_transform(predictions)]
 
