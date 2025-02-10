@@ -101,7 +101,7 @@ class ImageGallery(QtWidgets.QMainWindow):
         layout.addWidget(self.image_scroll_area)
 
         # Display images
-        self.display_images()
+        self.rearrange_images()
 
     def toggle_selection(self, image_path):
         """Toggle selection of an image and update its UI directly"""
@@ -122,13 +122,18 @@ class ImageGallery(QtWidgets.QMainWindow):
             if label:
                 label.deleteLater()  # Remove the widget
 
-    def display_images(self):
-        """Load and display images efficiently"""
+        # Rebuild the layout to shift images
+        self.rearrange_images()
+
+    def rearrange_images(self):
+        """Repopulate the grid layout to remove gaps after an image is deleted."""
+        # Clear the grid
         for i in reversed(range(self.image_layout.count())):
             self.image_layout.itemAt(i).widget().deleteLater()
 
         self.image_labels.clear()
 
+        # Re-add all remaining images
         for idx, image_path in enumerate(self.image_paths):
             pixmap = QtGui.QPixmap(image_path).scaled(self.image_width, self.image_height, QtCore.Qt.AspectRatioMode.KeepAspectRatio)
             label = DraggableLabel(image_path, self)
