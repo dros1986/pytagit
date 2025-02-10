@@ -224,7 +224,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
     
     def load_or_compute_features(self):
         if os.path.exists(self.features_file):
-            data = torch.load(self.features_file)
+            data = torch.load(self.features_file, weights_only=False)
             self.features = data['features'][:self.max_samples]
             self.image_paths = data['image_paths'][:self.max_samples]
             self.assignments = data.get('assignments', {})
@@ -442,7 +442,10 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             
             # encode labels
             le = preprocessing.LabelEncoder()
-            y_train = le.fit_transform(y_train)
+            # y_train = le.fit_transform(y_train)
+            unique_class_names = list(set(y_train + ['undefined']))
+            le.fit(unique_class_names)
+            y_train = le.transform(y_train)
 
             # find class id of undefined
             id_undefined_class = int(le.transform(['undefined'])[0])
@@ -455,14 +458,14 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
                 epochs=params["epochs"],
                 learning_rate=params["learning_rate"],
                 batch_size=params["batch_size"],
-                num_classes=len(set(y_train)),  # Number of unique labels
+                num_classes=len(unique_class_names),  # Number of unique labels
                 pretrained=params["pretrained"]
             )
 
             # print(model)
 
             # Notify the user that training is complete
-            QtWidgets.QMessageBox.information(self, "Training Complete", "CNN training has been successfully completed.")
+            # QtWidgets.QMessageBox.information(self, "Training Complete", "CNN training has been successfully completed.")
 
             # Classify non-selected samples
             non_selected_indices = []
