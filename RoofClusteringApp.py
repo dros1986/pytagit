@@ -15,6 +15,7 @@ import torch.nn.functional as F
 from einops import rearrange
 import cv2
 from OOD4Inclusion import OOD4Inclusion  # Import the OOD4Inclusion class
+from CNNTrainer import ImageDataset, transform_fun
 from Helpers import ThresholdDialog, RFClassifier, CNNClassifier
 
 
@@ -50,7 +51,7 @@ class DraggableLabel(QtWidgets.QLabel):
 
 
 class RoofClusteringApp(QtWidgets.QMainWindow):
-    def __init__(self, features_file, root_folder, schema_file, max_samples=1000, n_images_per_row=8, image_height=150, image_width=150, window_height=900, window_width=1400, n_rows_per_page=5):
+    def __init__(self, features_file, root_folder, schema_file, max_samples=10000, n_images_per_row=8, image_height=150, image_width=150, window_height=900, window_width=1400, n_rows_per_page=5):
         super().__init__()
         self.features_file = features_file
         self.root_folder = root_folder
@@ -500,27 +501,27 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             self.current_page = 0  # Reset to the first page
         self.display_cluster_images()  # Display images for the new cluster
 
-    def extract_features(self, image_paths):
+    def extract_features(self, image_paths, batch_size=42, device='cuda'):
+        # define model
         model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
         model.eval()
-        model.to('cuda')
-
+        model.to(device)
+        # define transform
+        transform = partial(transform_fun, train=False, sz=252)
+        # define dataset
+        dataset = ImageDataset(image_paths[:self.max_samples], labels=None, transform=transform)
+        # define dataloader
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+        # init features
         features = []
-        for image_path in tqdm(image_paths[:self.max_samples]):
-            image = np.array(Image.open(image_path))[:, :, :3]
-            img_t = self.transform_image(image)
-            img_t = img_t.to('cuda')
-            img_t = F.interpolate(img_t, size=(252, 252), mode='bilinear', align_corners=False)  # Resize to multiple of 14
+        # transform each batch
+        for images, labels in tqdm(dataloader):
+            images = images.to(device)
             with torch.no_grad():
-                feature = model(img_t).cpu()
+                feature = model(images).cpu()
             features.append(feature)
+        # concat and return
         return torch.cat(features, dim=0)
-    
-    def transform_image(self, image, sz=256):
-        trans = A.Compose([A.LongestMaxSize(max_size=sz), A.PadIfNeeded(sz, sz)])
-        image_t = trans(image=image)['image']
-        image_t = rearrange(image_t, 'h w c -> 1 c h w')
-        return torch.tensor(image_t, dtype=torch.float32)
 
 
 def main():
