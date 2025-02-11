@@ -116,11 +116,25 @@ class CNNTrainingDialog(QtWidgets.QDialog):
         layout.addWidget(self.learning_rate_input)
 
         # Batch size input
-        self.batch_size_input = QtWidgets.QSpinBox()
-        self.batch_size_input.setRange(1, 1024)
-        self.batch_size_input.setValue(32)  # Default value
-        layout.addWidget(QtWidgets.QLabel("Batch Size:"))
-        layout.addWidget(self.batch_size_input)
+        self.batch_size_train_input = QtWidgets.QSpinBox()
+        self.batch_size_train_input.setRange(1, 1024)
+        self.batch_size_train_input.setValue(32)  # Default value
+        layout.addWidget(QtWidgets.QLabel("Batch Size (train):"))
+        layout.addWidget(self.batch_size_train_input)
+
+        # Batch size input
+        self.batch_size_test_input = QtWidgets.QSpinBox()
+        self.batch_size_test_input.setRange(1, 1024)
+        self.batch_size_test_input.setValue(64)  # Default value
+        layout.addWidget(QtWidgets.QLabel("Batch Size (test):"))
+        layout.addWidget(self.batch_size_test_input)
+
+        # Num workers
+        self.num_workers_input = QtWidgets.QSpinBox()
+        self.num_workers_input.setRange(1, 30)
+        self.num_workers_input.setValue(8)  # Default value
+        layout.addWidget(QtWidgets.QLabel("Num Workers:"))
+        layout.addWidget(self.num_workers_input)
 
         # Pretrained checkbox
         self.pretrained_checkbox = QtWidgets.QCheckBox("Use Pretrained Weights")
@@ -138,7 +152,9 @@ class CNNTrainingDialog(QtWidgets.QDialog):
             "threshold": self.accept_threshold_input.value(),
             "epochs": self.nepochs_input.value(),
             "learning_rate": self.learning_rate_input.value(),
-            "batch_size": self.batch_size_input.value(),
+            "batch_size_train": self.batch_size_train_input.value(),
+            "batch_size_test": self.batch_size_test_input.value(),
+            "num_workers": self.num_workers_input.value(),
             "pretrained": self.pretrained_checkbox.isChecked()
         }
     
@@ -210,10 +226,10 @@ class CNNClassifier(MultiClassClassifier):
         # define transformations and dataloader
         transform = partial(transform_fun, train=True, sz=256)
         dataset = ImageDataset(filenames, y_train, transform)
-        dataloader = torch.utils.data.DataLoader(dataset, batch_size=params['batch_size'], shuffle=True)
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=params['batch_size_train'], shuffle=True)
         
         # define model
-        self.model = CNNTrainer(params['model'], params['learning_rate'], params['batch_size'], params['pretrained'], num_classes)
+        self.model = CNNTrainer(params['model'], params['learning_rate'], params['batch_size_train'], params['pretrained'], num_classes)
         
         trainer = pl.Trainer(
             max_epochs=params['epochs'],
@@ -236,7 +252,7 @@ class CNNClassifier(MultiClassClassifier):
         predictions = []
         # create dataloader
         dataset = ImageDataset(filenames, None, transform)
-        dataloader = torch.utils.data.DataLoader(dataset, batch_size=params['batch_size'], shuffle=False)
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=params['batch_size_test'], shuffle=False)
 
         for batch in tqdm(dataloader):
             images, labels = batch
