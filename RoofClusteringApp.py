@@ -484,38 +484,6 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         if self.current_cluster in self.cluster_buttons:
             self.cluster_buttons[self.current_cluster].setStyleSheet("background-color: green; color: white;")
 
-    
-    # def display_cluster_images(self):
-    #     if self.current_attribute not in self.clusters:
-    #         return
-
-    #     cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])[:self.max_samples]
-
-    #     # Identify images that need to be added or removed
-    #     current_labels = set(self.labels.keys())
-    #     cluster_paths = {self.image_paths[idx] for idx in cluster_images}
-
-    #     # Remove images that are no longer in the current cluster
-    #     for image_path in current_labels - cluster_paths:
-    #         if image_path in self.labels:
-    #             self.image_layout.removeWidget(self.labels[image_path])
-    #             self.labels[image_path].deleteLater()
-    #             del self.labels[image_path]
-
-    #     # Add new images to the layout
-    #     for idx, image_idx in enumerate(cluster_images):
-    #         image_path = self.image_paths[image_idx]
-    #         if image_path not in self.labels:
-    #             pixmap = QtGui.QPixmap(image_path).scaled(self.image_width, self.image_height, QtCore.Qt.AspectRatioMode.KeepAspectRatio)
-    #             label = DraggableLabel(image_path, self)
-    #             label.setPixmap(pixmap)
-    #             label.update_selection_state()
-    #             self.labels[image_path] = label
-
-    #         row = idx // self.n_images_per_row
-    #         col = idx % self.n_images_per_row
-    #         self.image_layout.addWidget(self.labels[image_path], row, col)
-
 
     @property
     def total_pages(self):
