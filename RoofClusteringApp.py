@@ -368,23 +368,52 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             event.acceptProposedAction()
             button.setStyleSheet(button.original_style)
 
+    
     def reassign_image_to_cluster(self, image_path, target_cluster):
         # Update the assignments dictionary
         if image_path not in self.assignments:
-            self.assignments[image_path] = {}  # Initialize if not present
+            self.assignments[image_path] = {}
         self.assignments[image_path][self.current_attribute] = target_cluster
-        
+
         # Reassign the image to the new cluster
         self.assign_images_to_clusters()
-        
+
         # Automatically mark the moved image as confirmed for the current attribute
         self.toggle_selection(image_path, force_select=True)
-        
+
         # Save the updated assignments and selected images
         self.save()
-        
-        # Refresh the UI
-        self.display_cluster_images()
+
+        # Incrementally update the UI for the moved image
+        self.update_image_position(image_path)
+
+
+    def update_image_position(self, image_path):
+        # Find the current index of the image in the grid layout
+        for idx, label in enumerate(self.labels.values()):
+            if label.image_path == image_path:
+                old_row = idx // self.n_images_per_row
+                old_col = idx % self.n_images_per_row
+                break
+        else:
+            return  # Image not found in the current layout
+
+        # Remove the image from its old position
+        self.image_layout.removeWidget(self.labels[image_path])
+        self.labels[image_path].setParent(None)
+
+        # Find the new index for the image in the current cluster
+        cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])
+        if image_path not in cluster_images:
+            return  # Image does not belong to the current cluster
+
+        new_idx = cluster_images.index(self.image_paths.index(image_path))
+        new_row = new_idx // self.n_images_per_row
+        new_col = new_idx % self.n_images_per_row
+
+        # Add the image to its new position
+        self.image_layout.addWidget(self.labels[image_path], new_row, new_col)
+
 
     def toggle_selection(self, image_path, force_select=False):
         # Toggle selection for the current attribute
@@ -410,26 +439,38 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         if self.current_cluster in self.cluster_buttons:
             self.cluster_buttons[self.current_cluster].setStyleSheet("background-color: green; color: white;")
 
+    
     def display_cluster_images(self):
-        # Clear previous images
-        for i in reversed(range(self.image_layout.count())):
-            self.image_layout.itemAt(i).widget().deleteLater()
-        
         if self.current_attribute not in self.clusters:
             return
-        
+
         cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])[:self.max_samples]
-        self.labels = {}
+
+        # Identify images that need to be added or removed
+        current_labels = set(self.labels.keys())
+        cluster_paths = {self.image_paths[idx] for idx in cluster_images}
+
+        # Remove images that are no longer in the current cluster
+        for image_path in current_labels - cluster_paths:
+            if image_path in self.labels:
+                self.image_layout.removeWidget(self.labels[image_path])
+                self.labels[image_path].deleteLater()
+                del self.labels[image_path]
+
+        # Add new images to the layout
         for idx, image_idx in enumerate(cluster_images):
             image_path = self.image_paths[image_idx]
-            pixmap = QtGui.QPixmap(image_path).scaled(self.image_width, self.image_height, QtCore.Qt.AspectRatioMode.KeepAspectRatio)
-            label = DraggableLabel(image_path, self)  # Pass the main window reference
-            label.setPixmap(pixmap)
-            label.update_selection_state()  # Update the border based on selection
-            self.labels[image_path] = label
+            if image_path not in self.labels:
+                pixmap = QtGui.QPixmap(image_path).scaled(self.image_width, self.image_height, QtCore.Qt.AspectRatioMode.KeepAspectRatio)
+                label = DraggableLabel(image_path, self)
+                label.setPixmap(pixmap)
+                label.update_selection_state()
+                self.labels[image_path] = label
+
             row = idx // self.n_images_per_row
             col = idx % self.n_images_per_row
-            self.image_layout.addWidget(label, row, col)
+            self.image_layout.addWidget(self.labels[image_path], row, col)
+
 
     def change_cluster(self, cluster):
         self.current_cluster = cluster
