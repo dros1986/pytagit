@@ -48,34 +48,146 @@ class DraggableLabel(QtWidgets.QLabel):
 
 
 
+
 class RoofClusteringApp(QtWidgets.QMainWindow):
-    
-    def __init__(self, features_file, root_folder, schema_file, max_samples=1000, n_images_per_row=8, image_height=150, image_width=150, window_height=900, window_width=1400):
+    def __init__(self, features_file, root_folder, schema_file, max_samples=1000, n_images_per_row=8, image_height=150, image_width=150, window_height=900, window_width=1400, n_rows_per_page=5):
         super().__init__()
         self.features_file = features_file
         self.root_folder = root_folder
         self.schema_file = schema_file
-        self.max_samples = max_samples  # Limit number of images to avoid slowdown
-        self.n_images_per_row = n_images_per_row  # Number of images per row
+        self.max_samples = max_samples
+        self.n_images_per_row = n_images_per_row
         self.image_height = image_height
         self.image_width = image_width
         self.window_height = window_height
         self.window_width = window_width
+        self.n_rows_per_page = n_rows_per_page
+        self.page_size = self.n_rows_per_page * self.n_images_per_row
         self.autosave = False
+        self.current_page = 0  # Track the current page
         self.load_schema()
-        self.current_attribute = list(self.schema.keys())[0]  # Default to first attribute
+        self.current_attribute = list(self.schema.keys())[0]
         self.current_cluster = "undefined"
-        self.selected_images = {}  # Dictionary to store selected images per attribute
+        self.selected_images = {}
         self.labels = {}
-        
-        # Load or compute features
         self.load_or_compute_features()
-        
-        # Assign images to clusters
         self.assign_images_to_clusters()
-        
-        # Initialize UI
         self.init_ui()
+
+    def init_ui(self):
+        self.setWindowTitle("Roof Clustering by Attribute")
+        self.setGeometry(100, 100, self.window_width, self.window_height)
+        central_widget = QtWidgets.QWidget()
+        self.setCentralWidget(central_widget)
+        layout = QtWidgets.QVBoxLayout(central_widget)
+
+        # Dropdown for attribute selection
+        self.attribute_selector = QtWidgets.QComboBox()
+        self.attribute_selector.addItems(self.schema.keys())
+        self.attribute_selector.currentTextChanged.connect(self.change_attribute)
+        self.attribute_selector.setStyleSheet("QComboBox { height: 25px; font-size: 16px; }")
+        layout.addWidget(self.attribute_selector)
+
+        # Auto Classify group box
+        auto_classify_group = QtWidgets.QGroupBox("Auto Classify")
+        auto_classify_layout = QtWidgets.QHBoxLayout()
+        self.ood_button = QtWidgets.QPushButton("OOD")
+        self.ood_button.setFixedHeight(50)
+        self.ood_button.clicked.connect(self.run_ood_classification)
+        auto_classify_layout.addWidget(self.ood_button)
+        self.classifiers = [RFClassifier(), CNNClassifier()]
+        for cur_classifier in self.classifiers:
+            cur_button = QtWidgets.QPushButton(cur_classifier.get_name())
+            cur_button.setFixedHeight(50)
+            partial_fun = partial(self.run_classification, trainer=cur_classifier)
+            cur_button.clicked.connect(partial_fun)
+            auto_classify_layout.addWidget(cur_button)
+        auto_classify_group.setLayout(auto_classify_layout)
+        layout.addWidget(auto_classify_group)
+
+        # Cluster selection buttons
+        self.button_layout = QtWidgets.QHBoxLayout()
+        self.cluster_buttons = {}
+        self.update_cluster_buttons()
+        layout.addLayout(self.button_layout)
+
+        # Page navigation and image display area
+        self.page_label = QtWidgets.QLabel(f"Page {self.current_page + 1} / {self.total_pages}")
+        layout.addWidget(self.page_label)
+
+        self.image_container = QtWidgets.QWidget()
+        self.image_container.setStyleSheet("background-color: rgba(255, 255, 255, 255);")
+        self.image_layout = QtWidgets.QGridLayout(self.image_container)
+        layout.addWidget(self.image_container)
+
+        # Add save button
+        self.save_button = QtWidgets.QPushButton("Save")
+        self.save_button.setFixedHeight(50)
+        save_fn = partial(self.save, is_button=True)
+        self.save_button.clicked.connect(save_fn)
+        layout.addWidget(self.save_button)
+
+        # Connect keyboard and mouse events for navigation
+        self.shortcut_left = QtGui.QShortcut(QtGui.QKeySequence("Left"), self)
+        self.shortcut_left.activated.connect(self.navigate_previous_page)
+        self.shortcut_right = QtGui.QShortcut(QtGui.QKeySequence("Right"), self)
+        self.shortcut_right.activated.connect(self.navigate_next_page)
+        self.image_container.wheelEvent = self.handle_mouse_wheel
+
+        self.display_cluster_images()
+
+    @property
+    def total_pages(self):
+        cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])
+        return (len(cluster_images) + self.page_size - 1) // self.page_size
+
+    def display_cluster_images(self):
+        if self.current_attribute not in self.clusters:
+            return
+
+        cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])[:self.max_samples]
+
+        # Clear existing labels
+        for label in list(self.labels.values()):
+            self.image_layout.removeWidget(label)
+            label.deleteLater()
+        self.labels.clear()
+
+        # Calculate start and end indices for the current page
+        start_idx = self.current_page * self.page_size
+        end_idx = min(start_idx + self.page_size, len(cluster_images))
+
+        # Load images for the current page
+        for idx, image_idx in enumerate(cluster_images[start_idx:end_idx]):
+            image_path = self.image_paths[image_idx]
+            pixmap = QtGui.QPixmap(image_path).scaled(self.image_width, self.image_height, QtCore.Qt.AspectRatioMode.KeepAspectRatio)
+            label = DraggableLabel(image_path, self)
+            label.setPixmap(pixmap)
+            label.update_selection_state()
+            self.labels[image_path] = label
+            row = idx // self.n_images_per_row
+            col = idx % self.n_images_per_row
+            self.image_layout.addWidget(self.labels[image_path], row, col)
+
+        # Update page label
+        self.page_label.setText(f"Page {self.current_page + 1} / {self.total_pages}")
+
+    def navigate_next_page(self):
+        if self.current_page < self.total_pages - 1:
+            self.current_page += 1
+            self.display_cluster_images()
+
+    def navigate_previous_page(self):
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.display_cluster_images()
+
+    def handle_mouse_wheel(self, event):
+        delta = event.angleDelta().y()
+        if delta > 0:
+            self.navigate_previous_page()
+        elif delta < 0:
+            self.navigate_next_page()
 
 
     def save(self, is_button=False):
@@ -125,73 +237,6 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             assigned_value = self.assignments.get(img_path, {}).get(self.current_attribute, "undefined")
             self.clusters[self.current_attribute][assigned_value].append(i)
 
-    def init_ui(self):
-        self.setWindowTitle("Roof Clustering by Attribute")
-        self.setGeometry(100, 100, self.window_width, self.window_height)
-        
-        central_widget = QtWidgets.QWidget()
-        self.setCentralWidget(central_widget)
-        layout = QtWidgets.QVBoxLayout(central_widget)
-        
-        # Dropdown for attribute selection
-        self.attribute_selector = QtWidgets.QComboBox()
-        self.attribute_selector.addItems(self.schema.keys())
-        self.attribute_selector.currentTextChanged.connect(self.change_attribute)
-        self.attribute_selector.setStyleSheet("QComboBox { height: 25px; font-size: 16px; }")
-        layout.addWidget(self.attribute_selector)
-        
-        # Auto Classify group box
-        auto_classify_group = QtWidgets.QGroupBox("Auto Classify")
-        auto_classify_layout = QtWidgets.QHBoxLayout()
-        
-        # OOD button
-        self.ood_button = QtWidgets.QPushButton("OOD")
-        self.ood_button.setFixedHeight(50)
-        self.ood_button.clicked.connect(self.run_ood_classification)
-        auto_classify_layout.addWidget(self.ood_button)
-
-        # define classifiers
-        self.classifiers = [RFClassifier(), CNNClassifier()]
-
-        # for each classifier
-        for cur_classifier in self.classifiers:
-            # create button
-            cur_button = QtWidgets.QPushButton(cur_classifier.get_name())
-            cur_button.setFixedHeight(50)
-            # create partial function
-            partial_fun = partial(self.run_classification, trainer=cur_classifier)
-            # connect button to partial function
-            cur_button.clicked.connect(partial_fun)
-            # add to layout
-            auto_classify_layout.addWidget(cur_button)
-
-        
-        auto_classify_group.setLayout(auto_classify_layout)
-        layout.addWidget(auto_classify_group)
-        
-        # Cluster selection buttons
-        self.button_layout = QtWidgets.QHBoxLayout()
-        self.cluster_buttons = {}
-        self.update_cluster_buttons()
-        layout.addLayout(self.button_layout)
-        
-        # Image display area
-        self.image_scroll_area = QtWidgets.QScrollArea()
-        self.image_container = QtWidgets.QWidget()
-        self.image_container.setStyleSheet("background-color: rgba(255, 255, 255, 255);")
-        self.image_layout = QtWidgets.QGridLayout(self.image_container)
-        self.image_scroll_area.setWidget(self.image_container)
-        self.image_scroll_area.setWidgetResizable(True)
-        layout.addWidget(self.image_scroll_area)
-
-        # Add save button
-        self.save_button = QtWidgets.QPushButton("Save")
-        self.save_button.setFixedHeight(50)
-        save_fn = partial(self.save, is_button=True)
-        self.save_button.clicked.connect(save_fn)
-        layout.addWidget(self.save_button)
-        
-        self.display_cluster_images()
 
     def change_attribute(self, attribute):
         self.current_attribute = attribute
@@ -440,36 +485,36 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             self.cluster_buttons[self.current_cluster].setStyleSheet("background-color: green; color: white;")
 
     
-    def display_cluster_images(self):
-        if self.current_attribute not in self.clusters:
-            return
+    # def display_cluster_images(self):
+    #     if self.current_attribute not in self.clusters:
+    #         return
 
-        cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])[:self.max_samples]
+    #     cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])[:self.max_samples]
 
-        # Identify images that need to be added or removed
-        current_labels = set(self.labels.keys())
-        cluster_paths = {self.image_paths[idx] for idx in cluster_images}
+    #     # Identify images that need to be added or removed
+    #     current_labels = set(self.labels.keys())
+    #     cluster_paths = {self.image_paths[idx] for idx in cluster_images}
 
-        # Remove images that are no longer in the current cluster
-        for image_path in current_labels - cluster_paths:
-            if image_path in self.labels:
-                self.image_layout.removeWidget(self.labels[image_path])
-                self.labels[image_path].deleteLater()
-                del self.labels[image_path]
+    #     # Remove images that are no longer in the current cluster
+    #     for image_path in current_labels - cluster_paths:
+    #         if image_path in self.labels:
+    #             self.image_layout.removeWidget(self.labels[image_path])
+    #             self.labels[image_path].deleteLater()
+    #             del self.labels[image_path]
 
-        # Add new images to the layout
-        for idx, image_idx in enumerate(cluster_images):
-            image_path = self.image_paths[image_idx]
-            if image_path not in self.labels:
-                pixmap = QtGui.QPixmap(image_path).scaled(self.image_width, self.image_height, QtCore.Qt.AspectRatioMode.KeepAspectRatio)
-                label = DraggableLabel(image_path, self)
-                label.setPixmap(pixmap)
-                label.update_selection_state()
-                self.labels[image_path] = label
+    #     # Add new images to the layout
+    #     for idx, image_idx in enumerate(cluster_images):
+    #         image_path = self.image_paths[image_idx]
+    #         if image_path not in self.labels:
+    #             pixmap = QtGui.QPixmap(image_path).scaled(self.image_width, self.image_height, QtCore.Qt.AspectRatioMode.KeepAspectRatio)
+    #             label = DraggableLabel(image_path, self)
+    #             label.setPixmap(pixmap)
+    #             label.update_selection_state()
+    #             self.labels[image_path] = label
 
-            row = idx // self.n_images_per_row
-            col = idx % self.n_images_per_row
-            self.image_layout.addWidget(self.labels[image_path], row, col)
+    #         row = idx // self.n_images_per_row
+    #         col = idx % self.n_images_per_row
+    #         self.image_layout.addWidget(self.labels[image_path], row, col)
 
 
     def change_cluster(self, cluster):
