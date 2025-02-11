@@ -226,7 +226,7 @@ class CNNClassifier(MultiClassClassifier):
         # define transformations and dataloader
         transform = partial(transform_fun, train=True, sz=256)
         dataset = ImageDataset(filenames, y_train, transform)
-        dataloader = torch.utils.data.DataLoader(dataset, batch_size=params['batch_size_train'], shuffle=True)
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=params['batch_size_train'], shuffle=True, drop_last=False)
         
         # define model
         self.model = CNNTrainer(params['model'], params['learning_rate'], params['batch_size_train'], params['pretrained'], num_classes)
@@ -252,7 +252,7 @@ class CNNClassifier(MultiClassClassifier):
         predictions = []
         # create dataloader
         dataset = ImageDataset(filenames, None, transform)
-        dataloader = torch.utils.data.DataLoader(dataset, batch_size=params['batch_size_test'], shuffle=False)
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=params['batch_size_test'], shuffle=False, drop_last=False)
 
         for batch in tqdm(dataloader):
             images, labels = batch
