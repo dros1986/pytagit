@@ -517,9 +517,19 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
     #         self.image_layout.addWidget(self.labels[image_path], row, col)
 
 
+    @property
+    def total_pages(self):
+        cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])
+        return (len(cluster_images) + self.page_size - 1) // self.page_size
+
+
     def change_cluster(self, cluster):
         self.current_cluster = cluster
         self.highlight_current_cluster_button()  # Highlight the new cluster button
+        # Reset current_page if it's out of bounds for the new cluster
+        total_pages = self.total_pages
+        if self.current_page >= total_pages:
+            self.current_page = 0  # Reset to the first page
         self.display_cluster_images()  # Display images for the new cluster
 
     def extract_features(self, image_paths):
