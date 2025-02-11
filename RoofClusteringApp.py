@@ -66,6 +66,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.current_attribute = list(self.schema.keys())[0]  # Default to first attribute
         self.current_cluster = "undefined"
         self.selected_images = {}  # Dictionary to store selected images per attribute
+        self.labels = {}
         
         # Load or compute features
         self.load_or_compute_features()
@@ -396,7 +397,9 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             self.selected_images[self.current_attribute].discard(image_path)  # Deselect
         
         # Refresh the UI to update the border
-        self.display_cluster_images()
+        if image_path in self.labels:
+            self.labels[image_path].update_selection_state()
+
 
     def highlight_current_cluster_button(self):
         # Reset all buttons to default color
@@ -416,12 +419,14 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             return
         
         cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])[:self.max_samples]
+        self.labels = {}
         for idx, image_idx in enumerate(cluster_images):
             image_path = self.image_paths[image_idx]
             pixmap = QtGui.QPixmap(image_path).scaled(self.image_width, self.image_height, QtCore.Qt.AspectRatioMode.KeepAspectRatio)
             label = DraggableLabel(image_path, self)  # Pass the main window reference
             label.setPixmap(pixmap)
             label.update_selection_state()  # Update the border based on selection
+            self.labels[image_path] = label
             row = idx // self.n_images_per_row
             col = idx % self.n_images_per_row
             self.image_layout.addWidget(label, row, col)
