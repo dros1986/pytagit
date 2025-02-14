@@ -121,12 +121,31 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.image_layout = QtWidgets.QGridLayout(self.image_container)
         layout.addWidget(self.image_container)
 
+        # add selection buttons (Select All, Deselect All, Remove Unselected)
+        selection_layout = QtWidgets.QHBoxLayout()
+
+        self.select_all_button = QtWidgets.QPushButton("Select All")
+        self.select_all_button.setFixedHeight(50)
+        select_fun = partial(self.select_or_deselect_all_images_in_current_page, select=True)
+        self.select_all_button.clicked.connect(select_fun)
+        selection_layout.addWidget(self.select_all_button)
+
+        self.deselect_all_button = QtWidgets.QPushButton("Deselect All")
+        self.deselect_all_button.setFixedHeight(50)
+        deselect_fun = partial(self.select_or_deselect_all_images_in_current_page, select=False)
+        self.deselect_all_button.clicked.connect(deselect_fun)
+        selection_layout.addWidget(self.deselect_all_button)
+
         # Add save button
         self.save_button = QtWidgets.QPushButton("Save")
         self.save_button.setFixedHeight(50)
         save_fn = partial(self.save, is_button=True)
         self.save_button.clicked.connect(save_fn)
-        layout.addWidget(self.save_button)
+        selection_layout.addWidget(self.save_button)
+        # layout.addWidget(self.save_button)
+
+        # Add the selection layout just before the save button
+        layout.addLayout(selection_layout)
 
         # Connect keyboard and mouse events for navigation
         self.shortcut_left = QtGui.QShortcut(QtGui.QKeySequence("Left"), self)
@@ -141,6 +160,27 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
     def total_pages(self):
         cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])
         return (len(cluster_images) + self.page_size - 1) // self.page_size
+    
+
+    def select_or_deselect_all_images_in_current_page(self, select=True):
+        # Calculate start and end indices for the current page
+        cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])[:self.max_samples]
+        start_idx = self.current_page * self.page_size
+        end_idx = min(start_idx + self.page_size, len(cluster_images))
+        # select all images in the current page
+        for idx, image_idx in enumerate(cluster_images[start_idx:end_idx]):
+            image_path = self.image_paths[image_idx]
+            # create set of selected images if it does not exist
+            if self.current_attribute not in self.selected_images:
+                self.selected_images[self.current_attribute] = set()
+            # add current image to selected images
+            if select:
+                self.selected_images[self.current_attribute].add(image_path)
+            else:
+                self.selected_images[self.current_attribute].discard(image_path)
+        # display cluster images
+        self.display_cluster_images()
+
 
     def display_cluster_images(self):
         if self.current_attribute not in self.clusters:
