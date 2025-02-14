@@ -50,6 +50,15 @@ class RandomForestDialog(QtWidgets.QDialog):
 
         layout = QtWidgets.QVBoxLayout(self)
 
+        # accept threshold input
+        self.accept_threshold_input = QtWidgets.QDoubleSpinBox()
+        self.accept_threshold_input.setRange(1e-6, 1.0)
+        self.accept_threshold_input.setDecimals(2)
+        self.accept_threshold_input.setSingleStep(0.01)
+        self.accept_threshold_input.setValue(0.90)  # Default value
+        layout.addWidget(QtWidgets.QLabel("Accept threshold:"))
+        layout.addWidget(self.accept_threshold_input)
+
         # Number of trees input
         self.n_estimators_input = QtWidgets.QSpinBox()
         self.n_estimators_input.setRange(1, 1000)
@@ -71,6 +80,7 @@ class RandomForestDialog(QtWidgets.QDialog):
 
     def get_parameters(self):
         return {
+            "threshold": self.accept_threshold_input.value(),
             "n_estimators": self.n_estimators_input.value(),
             "max_depth": self.max_depth_input.value(),
         }
@@ -200,7 +210,13 @@ class RFClassifier(MultiClassClassifier):
 
     def classify(self, params, filenames, features, id_undefined_class):
         # perform classification
-        predictions = self.clf.predict(features.numpy())
+        # predictions = self.clf.predict(features.numpy())
+        # compute probabilities
+        probs = self.clf.predict_proba(features.numpy())
+        # get predictions
+        predictions = np.argmax(probs, axis=-1)
+        # reset ones with low probability
+        predictions[probs.max(axis=-1) < params['threshold']] = id_undefined_class
         # return them
         return predictions
     
