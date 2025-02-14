@@ -157,6 +157,8 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.shortcut_left.activated.connect(self.navigate_previous_page)
         self.shortcut_right = QtGui.QShortcut(QtGui.QKeySequence("Right"), self)
         self.shortcut_right.activated.connect(self.navigate_next_page)
+        self.shortcut_select = QtGui.QShortcut(QtGui.QKeySequence(" "), self)
+        self.shortcut_select.activated.connect(self.select_or_deselect_images_in_page_on_keypress)
         self.image_container.wheelEvent = self.handle_mouse_wheel
 
         self.display_cluster_images()
@@ -165,6 +167,23 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
     def total_pages(self):
         cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])
         return (len(cluster_images) + self.page_size - 1) // self.page_size
+    
+    @property
+    def num_selected_images_in_page(self):
+        # Calculate start and end indices for the current page
+        cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])[:self.max_samples]
+        start_idx = self.current_page * self.page_size
+        end_idx = min(start_idx + self.page_size, len(cluster_images))
+        # if no images selected for current attribute, return 0
+        if self.current_attribute not in self.selected_images: 
+            return 0
+        # count selected images
+        num_selected = 0
+        for cur_image_idx in cluster_images[start_idx:end_idx]:
+            if self.image_paths[cur_image_idx] in self.selected_images[self.current_attribute]:
+                num_selected += 1
+        # return
+        return num_selected
     
 
     def get_visible_images(self, return_idx=False):
@@ -197,6 +216,13 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.display_cluster_images()
 
 
+    def select_or_deselect_images_in_page_on_keypress(self):
+        if self.num_selected_images_in_page > 0:
+            self.select_or_deselect_all_images_in_current_page(select=False)
+        else:
+            self.select_or_deselect_all_images_in_current_page(select=True)
+
+
 
     def remove_unselected_images(self):
         # initialize selected images if not already done
@@ -210,7 +236,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             if cur_image not in self.selected_images[self.current_attribute]:
                 # move it in the undefined cluster
                 self.reassign_image_to_cluster(cur_image, 'undefined', mark_as_confirmed=False)
-                
+
 
 
     def display_cluster_images(self):
@@ -558,11 +584,11 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             self.cluster_buttons[self.current_cluster].setStyleSheet("background-color: green; color: white;")
 
 
-    @property
-    def total_pages(self):
-        cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])
-        return (len(cluster_images) + self.page_size - 1) // self.page_size
-
+    # @property
+    # def total_pages(self):
+    #     cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])
+    #     return (len(cluster_images) + self.page_size - 1) // self.page_size
+    
 
     def change_cluster(self, cluster):
         self.current_cluster = cluster
