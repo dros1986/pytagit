@@ -136,6 +136,11 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.deselect_all_button.clicked.connect(deselect_fun)
         selection_layout.addWidget(self.deselect_all_button)
 
+        self.remove_unselected_button = QtWidgets.QPushButton("Remove Unselected")
+        self.remove_unselected_button.setFixedHeight(50)
+        self.remove_unselected_button.clicked.connect(self.remove_unselected_images)
+        selection_layout.addWidget(self.remove_unselected_button)
+
         # Add save button
         self.save_button = QtWidgets.QPushButton("Save")
         self.save_button.setFixedHeight(50)
@@ -162,14 +167,24 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         return (len(cluster_images) + self.page_size - 1) // self.page_size
     
 
-    def select_or_deselect_all_images_in_current_page(self, select=True):
+    def get_visible_images(self, return_idx=False):
         # Calculate start and end indices for the current page
         cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])[:self.max_samples]
         start_idx = self.current_page * self.page_size
         end_idx = min(start_idx + self.page_size, len(cluster_images))
+        # get filenames
+        filenames = [self.image_paths[image_idx] for image_idx in cluster_images[start_idx:end_idx]]
+        # return
+        if return_idx:
+            return filenames, list(range(start_idx,end_idx))
+        return filenames
+    
+
+    def select_or_deselect_all_images_in_current_page(self, select=True):
+        # get visible images
+        visible_images = self.get_visible_images()
         # select all images in the current page
-        for idx, image_idx in enumerate(cluster_images[start_idx:end_idx]):
-            image_path = self.image_paths[image_idx]
+        for image_path in visible_images:
             # create set of selected images if it does not exist
             if self.current_attribute not in self.selected_images:
                 self.selected_images[self.current_attribute] = set()
@@ -180,6 +195,22 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
                 self.selected_images[self.current_attribute].discard(image_path)
         # display cluster images
         self.display_cluster_images()
+
+
+
+    def remove_unselected_images(self):
+        # initialize selected images if not already done
+        if self.current_attribute not in self.selected_images:
+            self.selected_images[self.current_attribute] = set()
+        # get visible images
+        visible_images = self.get_visible_images()
+        # for each image
+        for cur_image in visible_images:
+            # if it is not selected
+            if cur_image not in self.selected_images[self.current_attribute]:
+                # move it in the undefined cluster
+                self.reassign_image_to_cluster(cur_image, 'undefined', mark_as_confirmed=False)
+                
 
 
     def display_cluster_images(self):
@@ -455,7 +486,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             button.setStyleSheet(button.original_style)
 
     
-    def reassign_image_to_cluster(self, image_path, target_cluster):
+    def reassign_image_to_cluster(self, image_path, target_cluster, mark_as_confirmed=True):
         # Update the assignments dictionary
         if image_path not in self.assignments:
             self.assignments[image_path] = {}
@@ -465,7 +496,8 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.assign_images_to_clusters()
 
         # Automatically mark the moved image as confirmed for the current attribute
-        self.toggle_selection(image_path, force_select=True)
+        if mark_as_confirmed:
+            self.toggle_selection(image_path, force_select=True)
 
         # Save the updated assignments and selected images
         self.save()
