@@ -89,13 +89,18 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.attribute_selector.setStyleSheet("QComboBox { height: 25px; font-size: 16px; }")
         layout.addWidget(self.attribute_selector)
 
+        # Main layout to hold both group boxes
+        main_layout = QtWidgets.QHBoxLayout()
+
         # Auto Classify group box
         auto_classify_group = QtWidgets.QGroupBox("Auto Classify")
         auto_classify_layout = QtWidgets.QHBoxLayout()
+
         self.ood_button = QtWidgets.QPushButton("OOD")
         self.ood_button.setFixedHeight(50)
         self.ood_button.clicked.connect(self.run_ood_classification)
         auto_classify_layout.addWidget(self.ood_button)
+
         self.classifiers = [RFClassifier(), CNNClassifier()]
         for cur_classifier in self.classifiers:
             cur_button = QtWidgets.QPushButton(cur_classifier.get_name())
@@ -103,8 +108,43 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             partial_fun = partial(self.run_classification, trainer=cur_classifier)
             cur_button.clicked.connect(partial_fun)
             auto_classify_layout.addWidget(cur_button)
+
         auto_classify_group.setLayout(auto_classify_layout)
-        layout.addWidget(auto_classify_group)
+        main_layout.addWidget(auto_classify_group, 4)
+
+        # Pseudo-labelling group box
+        pseudolabelling_group = QtWidgets.QGroupBox("Pseudo-Labelling")
+        pseudolabelling_layout = QtWidgets.QHBoxLayout()
+
+        self.pseudo_checkbox = QtWidgets.QCheckBox("Pseudo-labelling")
+        self.acceptance_threshold_input = QtWidgets.QDoubleSpinBox()
+        self.acceptance_threshold_input.setRange(0.0, 1.0)
+        self.acceptance_threshold_input.setSingleStep(0.10)
+        self.acceptance_threshold_input.setValue(0.7)
+        self.acceptance_threshold_input.setEnabled(False)
+        self.acceptance_threshold_input.setPrefix("Threshold: ")
+
+        self.num_iterations_input = QtWidgets.QSpinBox()
+        self.num_iterations_input.setRange(1, 100)
+        self.num_iterations_input.setValue(20)
+        self.num_iterations_input.setEnabled(False)
+        self.num_iterations_input.setPrefix("Iterations: ")
+
+        def toggle_pseudo_options(state):
+            enabled = state == QtCore.Qt.CheckState.Checked.value
+            self.acceptance_threshold_input.setEnabled(enabled)
+            self.num_iterations_input.setEnabled(enabled)
+
+        self.pseudo_checkbox.stateChanged.connect(toggle_pseudo_options)
+
+        pseudolabelling_layout.addWidget(self.pseudo_checkbox)
+        pseudolabelling_layout.addWidget(self.acceptance_threshold_input)
+        pseudolabelling_layout.addWidget(self.num_iterations_input)
+
+        pseudolabelling_group.setLayout(pseudolabelling_layout)
+        main_layout.addWidget(pseudolabelling_group, 1)
+
+        layout.addLayout(main_layout)
 
         # Cluster selection buttons
         self.button_layout = QtWidgets.QHBoxLayout()
