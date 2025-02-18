@@ -125,7 +125,8 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.acceptance_threshold_input.setPrefix("Threshold: ")
 
         self.num_iterations_input = QtWidgets.QSpinBox()
-        self.num_iterations_input.setRange(1, 100)
+        self.num_iterations_input.setRange(1, 10000)
+        self.num_iterations_input.setSingleStep(20)
         self.num_iterations_input.setValue(20)
         self.num_iterations_input.setEnabled(False)
         self.num_iterations_input.setPrefix("Iterations: ")
@@ -478,36 +479,107 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
     def run_classification(self, trainer):
         # Open dialog
         dialog = trainer.get_dialog(self)
-        # if accepted
+        # If accepted
         if not dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
             return
         # get parameters
         params = dialog.get_parameters()
-        # get train features
-        X_train, y_train, filenames, num_classes, id_undefined_class, le = self.get_training_features()
 
-        # train
+        # Check if pseudolabeling is enabled
+        pseudo_enabled = self.pseudo_checkbox.isChecked()
+        acceptance_threshold = self.acceptance_threshold_input.value()
+        num_iterations = self.num_iterations_input.value()
+
+        # Get training features
+        X_train, y_train, filenames, num_classes, id_undefined_class, le = self.get_training_features()
+        if X_train is None:  # Check if no samples are available for training
+            return
+
+        # Train the classifier
         self.setVisible(False)
         training_performed = trainer.train(params, X_train, y_train, filenames, id_undefined_class, num_classes)
         self.setVisible(True)
-        if not training_performed: return
-        # get non selected features
+        if not training_performed:
+            return
+
+        # Pseudolabeling loop if enabled
+        if pseudo_enabled:
+            non_selected_indices, non_selected_filenames, non_selected_features = self.get_non_selected_features()
+
+            for n_iter, iteration in enumerate(range(num_iterations)):
+                # if the number of non_selected_samples is 0, quit
+                if len(non_selected_features) == 0: 
+                    print('No more untagged samples. Quitting pseudo labeling.')
+                    break
+                # Classify non-selected samples
+                predictions, confidence_scores = trainer.classify(params, non_selected_filenames, non_selected_features, id_undefined_class)
+
+                # Filter predictions based on confidence (threshold)
+                confident_predictions = []
+                confident_indices = []
+
+                # filter by confidence (TODO: can be optimized)
+                for idx, (pred, conf) in enumerate(zip(predictions, confidence_scores)):
+                    if conf >= acceptance_threshold:
+                        confident_predictions.append(pred)
+                        # confident_indices.append(non_selected_indices[idx])
+                        confident_indices.append(idx)
+
+                # Update assignments with confident predictions
+                for idx, pred in zip(confident_indices, confident_predictions):
+                    image_path = self.image_paths[idx]
+                    image_path = self.image_paths[non_selected_indices[idx]]
+                    if image_path not in self.assignments:
+                        self.assignments[image_path] = {}
+                    self.assignments[image_path][self.current_attribute] = str(le.inverse_transform([pred])[0])
+
+                # Add newly labeled samples to the training set
+                new_X_train = non_selected_features[confident_indices].numpy()
+                new_y_train = np.array(confident_predictions)
+                new_filenames = [non_selected_filenames[i] for i in confident_indices]
+
+                # Remove labeled samples from the pool of unlabeled samples
+                non_selected_indices = [idx for idx in non_selected_indices if idx not in confident_indices]
+                non_selected_features = non_selected_features[[i for i in range(len(non_selected_features)) if i not in confident_indices]]
+                non_selected_filenames = [fn for fn in non_selected_filenames if fn not in new_filenames]
+
+                # Retrain the model with the updated dataset
+                if len(new_X_train) > 0:
+                    num_of_new_samples = len(new_X_train)
+                    new_X_train = np.vstack([new_X_train, X_train])
+                    new_y_train = np.concatenate([new_y_train, y_train])
+                    # filenames.extend(new_filenames)
+                    new_filenames.extend(filenames)
+                    print(f'Iteration {n_iter+1}/{num_iterations} of pseudolabeling. Using {len(X_train)} real, {num_of_new_samples} fake, {len(new_X_train)} total samples.')
+                    trainer.train(params, new_X_train, new_y_train, new_filenames, id_undefined_class, num_classes)
+
+        # check if threshold is inside params
+            if 'threshold' in params:
+                acceptance_threshold = params['threshold']
+            else:
+                acceptance_threshold = 0
+
+        # else:
+        # at the end, classify
+        # Without pseudolabeling, classify all non-selected samples once
         non_selected_indices, non_selected_filenames, non_selected_features = self.get_non_selected_features()
-        # classify them
-        predictions = trainer.classify(params, non_selected_filenames, non_selected_features, id_undefined_class)
-        # from label ids to label names
+        predictions, confidences = trainer.classify(params, non_selected_filenames, non_selected_features, id_undefined_class)
+
+        predictions[confidences < acceptance_threshold] = id_undefined_class
+
+        # From label IDs to label names
         predictions = [str(v) for v in le.inverse_transform(predictions)]
 
         # Assign predictions to non-selected samples
         for idx, pred in zip(non_selected_indices, predictions):
             image_path = self.image_paths[idx]
             if image_path not in self.assignments:
-                self.assignments[image_path] = {}  # Initialize if not present
+                self.assignments[image_path] = {}
             self.assignments[image_path][self.current_attribute] = pred
 
         # Save updated assignments
-        self.save()
-        
+        # self.save()
+
         # Refresh the UI
         self.assign_images_to_clusters()
         self.display_cluster_images()

@@ -215,10 +215,11 @@ class RFClassifier(MultiClassClassifier):
         probs = self.clf.predict_proba(features.numpy())
         # get predictions
         predictions = np.argmax(probs, axis=-1)
+        confidences = np.max(probs, axis=-1)
         # reset ones with low probability
-        predictions[probs.max(axis=-1) < params['threshold']] = id_undefined_class
+        # predictions[probs.max(axis=-1) < params['threshold']] = id_undefined_class
         # return them
-        return predictions
+        return predictions, confidences
     
 
 
@@ -266,6 +267,7 @@ class CNNClassifier(MultiClassClassifier):
         # init model and output
         self.model.eval()
         predictions = []
+        probs = []
         # create dataloader
         dataset = ImageDataset(filenames, None, transform)
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=params['batch_size_test'], shuffle=False, drop_last=False)
@@ -278,11 +280,13 @@ class CNNClassifier(MultiClassClassifier):
                 prob, pred_label = output.max(dim=1)
                 pred_label[prob < params['threshold']] = id_undefined_class
                 predictions.append(pred_label)
+                probs.append(prob)
 
         predictions = torch.cat(predictions)
+        probs = torch.cat(probs)
 
         
-        return predictions
+        return predictions, probs
     
 
 
