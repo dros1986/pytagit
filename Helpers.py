@@ -4,6 +4,7 @@ from functools import partial
 from PyQt6 import QtWidgets, QtGui, QtCore
 from sklearn import preprocessing
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
 from CNNTrainer import CNNTrainer, ImageDataset, transform_fun
 import albumentations as A
 from PIL import Image
@@ -83,6 +84,62 @@ class RandomForestDialog(QtWidgets.QDialog):
             "threshold": self.accept_threshold_input.value(),
             "n_estimators": self.n_estimators_input.value(),
             "max_depth": self.max_depth_input.value(),
+        }
+    
+
+class kNNDialog(QtWidgets.QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("kNN Parameters")
+        self.setModal(True)
+
+        layout = QtWidgets.QVBoxLayout(self)
+
+        # missing:
+        # algorithm='auto',
+        # metric= 'minkowski'
+
+        # accept threshold input
+        self.accept_threshold_input = QtWidgets.QDoubleSpinBox()
+        self.accept_threshold_input.setRange(1e-6, 1.0)
+        self.accept_threshold_input.setDecimals(2)
+        self.accept_threshold_input.setSingleStep(0.01)
+        self.accept_threshold_input.setValue(0.90)  # Default value
+        layout.addWidget(QtWidgets.QLabel("Accept threshold:"))
+        layout.addWidget(self.accept_threshold_input)
+
+        # Number of neighbours input
+        self.neighbours_input = QtWidgets.QSpinBox()
+        self.neighbours_input.setRange(1, 100)
+        self.neighbours_input.setValue(3)  # Default value
+        layout.addWidget(QtWidgets.QLabel("Number of Neighbours:"))
+        layout.addWidget(self.neighbours_input)
+
+        # leaf_size input
+        self.leaf_size_input = QtWidgets.QSpinBox()
+        self.leaf_size_input.setRange(1, 100)
+        self.leaf_size_input.setValue(10)  # Default value
+        layout.addWidget(QtWidgets.QLabel("Leaf Size:"))
+        layout.addWidget(self.leaf_size_input)
+
+        # p input
+        self.p_input = QtWidgets.QSpinBox()
+        self.p_input.setRange(1, 3)
+        self.p_input.setValue(2)  # Default value
+        layout.addWidget(QtWidgets.QLabel("P:"))
+        layout.addWidget(self.p_input)
+
+        # Run button
+        self.run_button = QtWidgets.QPushButton("Run")
+        self.run_button.clicked.connect(self.accept)
+        layout.addWidget(self.run_button)
+
+    def get_parameters(self):
+        return {
+            "threshold": self.accept_threshold_input.value(),
+            "neighbours": self.neighbours_input.value(),
+            "leaf_size": self.leaf_size_input.value(),
+            "p": self.p_input.value(),
         }
     
 
@@ -224,6 +281,41 @@ class RFClassifier(MultiClassClassifier):
 
 
 
+class kNNClassifier(MultiClassClassifier):
+
+    def get_name(self):
+        return 'kNN'
+
+    def get_dialog(self, parent=None):
+        return kNNDialog(parent)
+    
+
+    def train(self, params, X_train, y_train, filenames, id_undefined_class, num_classes):
+        self.knn = KNeighborsClassifier(
+            n_neighbors = params["neighbours"],
+            algorithm='auto',
+            leaf_size = params["leaf_size"],
+            p = params["p"],
+            metric= 'minkowski'
+        )
+        self.knn.fit(X_train, y_train)
+        return True
+
+
+    def classify(self, params, filenames, features, id_undefined_class):
+        # perform classification
+        # predictions = self.clf.predict(features.numpy())
+        # compute probabilities
+        probs = self.knn.predict_proba(features.numpy())
+        # get predictions
+        predictions = np.argmax(probs, axis=-1)
+        confidences = np.max(probs, axis=-1)
+        # return them
+        return predictions, confidences
+    
+
+
+
 class CNNClassifier(MultiClassClassifier):
 
     def __init__(self):
@@ -297,7 +389,7 @@ if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
 
     # define classifiers
-    classifiers = [RFClassifier(), CNNClassifier()]
+    classifiers = [RFClassifier(), CNNClassifier(), kNNClassifier()]
 
     for cur_classifier in classifiers:
         # get dialog

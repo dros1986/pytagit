@@ -16,7 +16,7 @@ from einops import rearrange
 import cv2
 from OOD4Inclusion import OOD4Inclusion  # Import the OOD4Inclusion class
 from CNNTrainer import ImageDataset, transform_fun
-from Helpers import ThresholdDialog, RFClassifier, CNNClassifier
+from Helpers import ThresholdDialog, RFClassifier, CNNClassifier, kNNClassifier
 
 
 class DraggableLabel(QtWidgets.QLabel):
@@ -101,7 +101,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.ood_button.clicked.connect(self.run_ood_classification)
         auto_classify_layout.addWidget(self.ood_button)
 
-        self.classifiers = [RFClassifier(), CNNClassifier()]
+        self.classifiers = [RFClassifier(), CNNClassifier(), kNNClassifier()]
         for cur_classifier in self.classifiers:
             cur_button = QtWidgets.QPushButton(cur_classifier.get_name())
             cur_button.setFixedHeight(50)
@@ -442,7 +442,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         # if no samples, return
         if not X_train:
             QtWidgets.QMessageBox.warning(self, "Error", "No verified samples found for training.")
-            return
+            return None
         # concatenate
         X_train = np.vstack(X_train)
         # encode labels
@@ -491,7 +491,13 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         num_iterations = self.num_iterations_input.value()
 
         # Get training features
-        X_train, y_train, filenames, num_classes, id_undefined_class, le = self.get_training_features()
+        ret_vals = self.get_training_features()
+        if ret_vals is None:
+            print('No examples selected for this feature.')
+            return
+        # split returned values
+        X_train, y_train, filenames, num_classes, id_undefined_class, le = ret_vals
+
         if X_train is None:  # Check if no samples are available for training
             return
 
@@ -553,7 +559,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
                     print(f'Iteration {n_iter+1}/{num_iterations} of pseudolabeling. Using {len(X_train)} real, {num_of_new_samples} fake, {len(new_X_train)} total samples.')
                     trainer.train(params, new_X_train, new_y_train, new_filenames, id_undefined_class, num_classes)
 
-        # check if threshold is inside params
+            # check if threshold is inside params
             if 'threshold' in params:
                 acceptance_threshold = params['threshold']
             else:
