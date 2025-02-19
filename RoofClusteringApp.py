@@ -433,6 +433,9 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         y_train = []
         filenames = []
         for cluster, indices in self.clusters[self.current_attribute].items():
+            # do not insert undefined examples in training set
+            if cluster == 'undefined': 
+                continue
             for idx in indices:
                 image_path = self.image_paths[idx]
                 if image_path in self.selected_images.get(self.current_attribute, set()):
@@ -447,8 +450,11 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         X_train = np.vstack(X_train)
         # encode labels
         le = preprocessing.LabelEncoder()
-        unique_class_names = list(set(y_train + ['undefined']))
+        unique_class_names = list(set(y_train))
         le.fit(unique_class_names)
+        # add undefined class
+        le.classes_ = np.append(le.classes_, "undefined")
+        # transform
         y_train = le.transform(y_train)
         # get number of classes
         num_classes = len(unique_class_names)
@@ -504,12 +510,14 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         # Train the classifier
         self.setVisible(False)
         training_performed = trainer.train(params, X_train, y_train, filenames, id_undefined_class, num_classes)
-        self.setVisible(True)
+        # self.setVisible(True)
         if not training_performed:
+            self.setVisible(True)
             return
 
         # Pseudolabeling loop if enabled
         if pseudo_enabled:
+            print('-'*100)
             non_selected_indices, non_selected_filenames, non_selected_features = self.get_non_selected_features()
 
             for n_iter, iteration in enumerate(range(num_iterations)):
@@ -558,6 +566,9 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
                     new_filenames.extend(filenames)
                     print(f'Iteration {n_iter+1}/{num_iterations} of pseudolabeling. Using {len(X_train)} real, {num_of_new_samples} fake, {len(new_X_train)} total samples.')
                     trainer.train(params, new_X_train, new_y_train, new_filenames, id_undefined_class, num_classes)
+                else:
+                    print(f'Iteration {n_iter+1}/{num_iterations} of pseudolabeling. No more pseudolabels. Stopping.')
+                    break
 
             # check if threshold is inside params
             if 'threshold' in params:
@@ -585,6 +596,9 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
 
         # Save updated assignments
         # self.save()
+
+        # show gui
+        self.setVisible(True)
 
         # Refresh the UI
         self.assign_images_to_clusters()
