@@ -541,7 +541,6 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
 
                 # Update assignments with confident predictions
                 for idx, pred in zip(confident_indices, confident_predictions):
-                    image_path = self.image_paths[idx]
                     image_path = self.image_paths[non_selected_indices[idx]]
                     if image_path not in self.assignments:
                         self.assignments[image_path] = {}
@@ -553,16 +552,15 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
                 new_filenames = [non_selected_filenames[i] for i in confident_indices]
 
                 # Remove labeled samples from the pool of unlabeled samples
-                non_selected_indices = [idx for idx in non_selected_indices if idx not in confident_indices]
-                non_selected_features = non_selected_features[[i for i in range(len(non_selected_features)) if i not in confident_indices]]
-                non_selected_filenames = [fn for fn in non_selected_filenames if fn not in new_filenames]
+                # non_selected_indices = [idx for idx in non_selected_indices if idx not in confident_indices]
+                # non_selected_features = non_selected_features[[i for i in range(len(non_selected_features)) if i not in confident_indices]]
+                # non_selected_filenames = [fn for fn in non_selected_filenames if fn not in new_filenames]
 
                 # Retrain the model with the updated dataset
                 if len(new_X_train) > 0:
                     num_of_new_samples = len(new_X_train)
                     new_X_train = np.vstack([new_X_train, X_train])
                     new_y_train = np.concatenate([new_y_train, y_train])
-                    # filenames.extend(new_filenames)
                     new_filenames.extend(filenames)
                     print(f'Iteration {n_iter+1}/{num_iterations} of pseudolabeling. Using {len(X_train)} real, {num_of_new_samples} fake, {len(new_X_train)} total samples.')
                     trainer.train(params, new_X_train, new_y_train, new_filenames, id_undefined_class, num_classes)
