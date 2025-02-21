@@ -94,6 +94,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
 
         # Auto Classify group box
         auto_classify_group = QtWidgets.QGroupBox("Auto Classify")
+        auto_classify_group.setMaximumHeight(120)
         auto_classify_layout = QtWidgets.QHBoxLayout()
 
         self.ood_button = QtWidgets.QPushButton("OOD")
@@ -110,10 +111,43 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             auto_classify_layout.addWidget(cur_button)
 
         auto_classify_group.setLayout(auto_classify_layout)
-        main_layout.addWidget(auto_classify_group, 4)
+        main_layout.addWidget(auto_classify_group, 8)
+
+
+        # Sampling group box
+        sampling_group = QtWidgets.QGroupBox("Resampling")
+        sampling_group.setToolTip('With this box it is possible to address imbalanced problems.')
+        sampling_group.setMaximumHeight(120)
+        sampling_layout = QtWidgets.QVBoxLayout()
+
+        self.sampling_button_group = QtWidgets.QButtonGroup()
+        
+        self.sampling_none = QtWidgets.QRadioButton("None")
+        self.sampling_none.setToolTip('Selecting this option, the dataset will not be balanced and ramain the same.')
+        self.sampling_none.setChecked(True)  # Default selection
+        self.sampling_over = QtWidgets.QRadioButton("Over")
+        self.sampling_over.setToolTip('The system will duplicate samples from minor classes to match major cardinality.')
+        self.sampling_under = QtWidgets.QRadioButton("Under")
+        self.sampling_under.setToolTip('The system will delete samples from major classes to match minor cardinality.')
+
+        self.sampling_button_group.addButton(self.sampling_none)
+        self.sampling_button_group.addButton(self.sampling_over)
+        self.sampling_button_group.addButton(self.sampling_under)
+
+        # Reduce spacing between radio buttons
+        sampling_layout.setSpacing(1)  # Decrease spacing (default is usually around 6-10)
+        sampling_layout.setContentsMargins(10, 2, 2, 2)  # Reduce margins if needed
+
+        sampling_layout.addWidget(self.sampling_none)
+        sampling_layout.addWidget(self.sampling_over)
+        sampling_layout.addWidget(self.sampling_under)
+
+        sampling_group.setLayout(sampling_layout)
+        main_layout.addWidget(sampling_group, 1)
 
         # Pseudo-labelling group box
         pseudolabelling_group = QtWidgets.QGroupBox("Pseudo-Labelling")
+        pseudolabelling_group.setMaximumHeight(120)
         pseudolabelling_layout = QtWidgets.QHBoxLayout()
 
         self.pseudo_checkbox = QtWidgets.QCheckBox("Pseudo-labelling")
@@ -143,7 +177,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         pseudolabelling_layout.addWidget(self.num_iterations_input)
 
         pseudolabelling_group.setLayout(pseudolabelling_layout)
-        main_layout.addWidget(pseudolabelling_group, 1)
+        main_layout.addWidget(pseudolabelling_group, 2)
 
         layout.addLayout(main_layout)
 
@@ -155,6 +189,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
 
         # Page navigation and image display area
         self.page_label = QtWidgets.QLabel(f"Page {self.current_page + 1} / {self.total_pages}")
+        self.page_label.setMaximumHeight(50)
         layout.addWidget(self.page_label)
 
         self.image_container = QtWidgets.QWidget()
@@ -344,8 +379,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
     def load_schema(self):
         with open(self.schema_file, 'r') as f:
             self.schema = json.load(f)
-        self.schema["undefined"] = ["undefined"]
-    
+ 
     def load_or_compute_features(self):
         if os.path.exists(self.features_file):
             data = torch.load(self.features_file, weights_only=False)
@@ -427,14 +461,15 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             self.display_cluster_images()
 
 
-    def get_training_features(self):    
+    def get_training_features(self):
         # Prepare training data (verified samples)
         X_train = []
         y_train = []
         filenames = []
+
+        # Collect all verified samples, excluding "undefined" examples
         for cluster, indices in self.clusters[self.current_attribute].items():
-            # do not insert undefined examples in training set
-            if cluster == 'undefined': 
+            if cluster == 'undefined':  # Skip undefined examples
                 continue
             for idx in indices:
                 image_path = self.image_paths[idx]
@@ -442,26 +477,72 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
                     X_train.append(self.features[idx].numpy())
                     y_train.append(cluster)
                     filenames.append(image_path)
-        # if no samples, return
+
+        # If no samples are available, return None
         if not X_train:
             QtWidgets.QMessageBox.warning(self, "Error", "No verified samples found for training.")
             return None
-        # concatenate
+
+        # Convert to numpy arrays
         X_train = np.vstack(X_train)
-        # encode labels
         le = preprocessing.LabelEncoder()
         unique_class_names = list(set(y_train))
         le.fit(unique_class_names)
-        # add undefined class
-        le.classes_ = np.append(le.classes_, "undefined")
-        # transform
-        y_train = le.transform(y_train)
-        # get number of classes
+        y_train_encoded = le.transform(y_train)
+
+        # Count the number of samples per class
+        class_counts = {cls: sum(y_train_encoded == cls_id) for cls_id, cls in enumerate(le.classes_)}
+
+        # Determine the sampling strategy
+        if self.sampling_none.isChecked():
+            # No resampling
+            pass
+        elif self.sampling_over.isChecked():
+            # Over-sampling: Duplicate samples from minor classes
+            max_count = max(class_counts.values())
+            for cls_id, cls in enumerate(le.classes_):
+                current_count = class_counts[cls]
+                if current_count < max_count:
+                    # Calculate how many additional samples are needed
+                    num_to_add = max_count - current_count
+                    cls_indices = np.where(y_train_encoded == cls_id)[0]
+                    if len(cls_indices) == 0:  # Ensure the class has samples
+                        print(f"Warning: Class '{cls}' has no samples. Skipping upsampling.")
+                        continue
+                    additional_samples = np.random.choice(cls_indices, size=num_to_add, replace=True)
+                    X_train = np.vstack([X_train, X_train[additional_samples]])
+                    y_train_encoded = np.concatenate([y_train_encoded, [cls_id] * num_to_add])
+                    filenames.extend([filenames[i] for i in additional_samples])
+        elif self.sampling_under.isChecked():
+            # Under-sampling: Reduce samples from major classes
+            min_count = min(class_counts.values())
+            filtered_X_train = []
+            filtered_y_train_encoded = []
+            filtered_filenames = []
+            for cls_id, cls in enumerate(le.classes_):
+                cls_indices = np.where(y_train_encoded == cls_id)[0]
+                if len(cls_indices) > min_count:
+                    # Randomly select a subset of samples
+                    selected_indices = np.random.choice(cls_indices, size=min_count, replace=False)
+                else:
+                    selected_indices = cls_indices
+                filtered_X_train.append(X_train[selected_indices])
+                filtered_y_train_encoded.extend([cls_id] * len(selected_indices))
+                filtered_filenames.extend([filenames[i] for i in selected_indices])
+            X_train = np.vstack(filtered_X_train)
+            y_train_encoded = np.array(filtered_y_train_encoded)
+            filenames = filtered_filenames
+
+        # Get number of classes
         num_classes = len(unique_class_names)
-        # find class id of undefined
+
+        # Add "undefined" class for consistency
+        le.classes_ = np.append(le.classes_, "undefined")
+
+        # Find class ID of "undefined"
         id_undefined_class = int(le.transform(['undefined'])[0])
-        # return
-        return X_train, y_train, filenames, num_classes, id_undefined_class, le
+
+        return X_train, y_train_encoded, filenames, num_classes, id_undefined_class, le
     
 
 
@@ -503,6 +584,13 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             return
         # split returned values
         X_train, y_train, filenames, num_classes, id_undefined_class, le = ret_vals
+
+        # print number of samples for each class
+        unique, counts = np.unique(y_train, return_counts=True)
+        print('-'*100)
+        print('Number of samples for each class:')
+        for u,c in zip(unique, counts):
+            print(u, '-->', c)
 
         if X_train is None:  # Check if no samples are available for training
             return
@@ -562,7 +650,10 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
                     new_X_train = np.vstack([new_X_train, X_train])
                     new_y_train = np.concatenate([new_y_train, y_train])
                     new_filenames.extend(filenames)
+                    # check and print
+                    assert(id_undefined_class not in new_y_train)
                     print(f'Iteration {n_iter+1}/{num_iterations} of pseudolabeling. Using {len(X_train)} real, {num_of_new_samples} fake, {len(new_X_train)} total samples.')
+                    # train again
                     trainer.train(params, new_X_train, new_y_train, new_filenames, id_undefined_class, num_classes)
                 else:
                     print(f'Iteration {n_iter+1}/{num_iterations} of pseudolabeling. No more pseudolabels. Stopping.')
