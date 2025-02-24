@@ -51,7 +51,7 @@ class DraggableLabel(QtWidgets.QLabel):
 
 
 class RoofClusteringApp(QtWidgets.QMainWindow):
-    def __init__(self, features_file, root_folder, schema_file, max_samples=10000, n_images_per_row=8, image_height=150, image_width=150, window_height=900, window_width=1400, n_rows_per_page=5):
+    def __init__(self, features_file, root_folder, schema_file, max_samples=10000, n_images_per_row=10, image_height=150, image_width=150, window_height=900, window_width=1400, n_rows_per_page=4):
         super().__init__()
         self.features_file = features_file
         self.root_folder = root_folder
@@ -89,7 +89,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.attribute_selector.setStyleSheet("QComboBox { height: 25px; font-size: 16px; }")
         layout.addWidget(self.attribute_selector)
 
-        # Main layout to hold both group boxes
+        # Main layout to hold all group boxes
         main_layout = QtWidgets.QHBoxLayout()
 
         # Auto Classify group box
@@ -113,15 +113,12 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         auto_classify_group.setLayout(auto_classify_layout)
         main_layout.addWidget(auto_classify_group, 8)
 
-
         # Sampling group box
         sampling_group = QtWidgets.QGroupBox("Resampling")
         sampling_group.setToolTip('With this box it is possible to address imbalanced problems.')
         sampling_group.setMaximumHeight(120)
         sampling_layout = QtWidgets.QVBoxLayout()
 
-        self.sampling_button_group = QtWidgets.QButtonGroup()
-        
         self.sampling_none = QtWidgets.QRadioButton("None")
         self.sampling_none.setToolTip('Selecting this option, the dataset will not be balanced and ramain the same.')
         self.sampling_none.setChecked(True)  # Default selection
@@ -130,6 +127,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.sampling_under = QtWidgets.QRadioButton("Under")
         self.sampling_under.setToolTip('The system will delete samples from major classes to match minor cardinality.')
 
+        self.sampling_button_group = QtWidgets.QButtonGroup()
         self.sampling_button_group.addButton(self.sampling_none)
         self.sampling_button_group.addButton(self.sampling_over)
         self.sampling_button_group.addButton(self.sampling_under)
@@ -197,41 +195,60 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.image_layout = QtWidgets.QGridLayout(self.image_container)
         layout.addWidget(self.image_container)
 
-        # add selection buttons (Select All, Deselect All, Remove Unselected)
-        selection_layout = QtWidgets.QHBoxLayout()
+        # Buttons layout with QGroupBoxes
+        button_groups_layout = QtWidgets.QHBoxLayout()
+
+        # Page Handling group box
+        page_handling_group = QtWidgets.QGroupBox("Page Handling")
+        page_handling_layout = QtWidgets.QHBoxLayout()
 
         self.select_all_button = QtWidgets.QPushButton("Select All")
         self.select_all_button.setFixedHeight(50)
         select_fun = partial(self.select_or_deselect_all_images_in_current_page, select=True)
         self.select_all_button.clicked.connect(select_fun)
-        selection_layout.addWidget(self.select_all_button)
+        page_handling_layout.addWidget(self.select_all_button)
 
         self.deselect_all_button = QtWidgets.QPushButton("Deselect All")
         self.deselect_all_button.setFixedHeight(50)
         deselect_fun = partial(self.select_or_deselect_all_images_in_current_page, select=False)
         self.deselect_all_button.clicked.connect(deselect_fun)
-        selection_layout.addWidget(self.deselect_all_button)
+        page_handling_layout.addWidget(self.deselect_all_button)
 
-        self.remove_unselected_button = QtWidgets.QPushButton("Remove unselected from \n current page")
-        self.remove_unselected_button.setFixedHeight(50)
-        self.remove_unselected_button.clicked.connect(self.remove_unselected_images)
-        selection_layout.addWidget(self.remove_unselected_button)
+        self.remove_unselected_button_page = QtWidgets.QPushButton("Remove unselected from \n current page")
+        self.remove_unselected_button_page.setFixedHeight(50)
+        self.remove_unselected_button_page.clicked.connect(self.remove_unselected_images)
+        page_handling_layout.addWidget(self.remove_unselected_button_page)
 
-        self.remove_unselected_button = QtWidgets.QPushButton("Remove all \n unselected samples")
-        self.remove_unselected_button.setFixedHeight(50)
-        self.remove_unselected_button.clicked.connect(self.remove_all_unselected_images)
-        selection_layout.addWidget(self.remove_unselected_button)
+        page_handling_group.setLayout(page_handling_layout)
+        button_groups_layout.addWidget(page_handling_group, 2)
 
-        # Add save button
+        # Cluster Handling group box
+        cluster_handling_group = QtWidgets.QGroupBox("Cluster Handling")
+        cluster_handling_layout = QtWidgets.QVBoxLayout()
+
+        self.remove_unselected_button_cluster = QtWidgets.QPushButton("Remove all \n unselected samples")
+        self.remove_unselected_button_cluster.setFixedHeight(50)
+        self.remove_unselected_button_cluster.clicked.connect(self.remove_all_unselected_images)
+        cluster_handling_layout.addWidget(self.remove_unselected_button_cluster)
+
+        cluster_handling_group.setLayout(cluster_handling_layout)
+        button_groups_layout.addWidget(cluster_handling_group, 1)
+
+        # Global Functions group box
+        global_functions_group = QtWidgets.QGroupBox("Global Functions")
+        global_functions_layout = QtWidgets.QVBoxLayout()
+
         self.save_button = QtWidgets.QPushButton("Save")
         self.save_button.setFixedHeight(50)
         save_fn = partial(self.save, is_button=True)
         self.save_button.clicked.connect(save_fn)
-        selection_layout.addWidget(self.save_button)
-        # layout.addWidget(self.save_button)
+        global_functions_layout.addWidget(self.save_button)
 
-        # Add the selection layout just before the save button
-        layout.addLayout(selection_layout)
+        global_functions_group.setLayout(global_functions_layout)
+        button_groups_layout.addWidget(global_functions_group, 1)
+
+        # Add the horizontal button layout
+        layout.addLayout(button_groups_layout)
 
         # Connect keyboard and mouse events for navigation
         self.shortcut_left = QtGui.QShortcut(QtGui.QKeySequence("Left"), self)
@@ -243,6 +260,8 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.image_container.wheelEvent = self.handle_mouse_wheel
 
         self.display_cluster_images()
+
+
 
     @property
     def total_pages(self):
