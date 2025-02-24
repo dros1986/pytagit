@@ -212,9 +212,14 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.deselect_all_button.clicked.connect(deselect_fun)
         selection_layout.addWidget(self.deselect_all_button)
 
-        self.remove_unselected_button = QtWidgets.QPushButton("Remove Unselected")
+        self.remove_unselected_button = QtWidgets.QPushButton("Remove unselected from \n current page")
         self.remove_unselected_button.setFixedHeight(50)
         self.remove_unselected_button.clicked.connect(self.remove_unselected_images)
+        selection_layout.addWidget(self.remove_unselected_button)
+
+        self.remove_unselected_button = QtWidgets.QPushButton("Remove all \n unselected samples")
+        self.remove_unselected_button.setFixedHeight(50)
+        self.remove_unselected_button.clicked.connect(self.remove_all_unselected_images)
         selection_layout.addWidget(self.remove_unselected_button)
 
         # Add save button
@@ -312,6 +317,29 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             if cur_image not in self.selected_images[self.current_attribute]:
                 # move it in the undefined cluster
                 self.reassign_image_to_cluster(cur_image, 'undefined', mark_as_confirmed=False)
+        # move to last page
+        if self.current_page >= self.total_pages:
+            self.current_page = max(0,self.total_pages-1)
+            self.display_cluster_images()
+
+    
+    def remove_all_unselected_images(self):
+        # initialize selected images if not already done
+        if self.current_attribute not in self.selected_images:
+            self.selected_images[self.current_attribute] = set()
+        # get visible images
+        cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])[:self.max_samples]
+        filenames = [self.image_paths[image_idx] for image_idx in cluster_images]
+        # for each image
+        for cur_image in filenames:
+            # if it is not selected
+            if cur_image not in self.selected_images[self.current_attribute]:
+                # move it in the undefined cluster
+                self.reassign_image_to_cluster(cur_image, 'undefined', mark_as_confirmed=False)
+        # move to last page
+        if self.current_page >= self.total_pages:
+            self.current_page = max(0,self.total_pages-1)
+            self.display_cluster_images()
 
 
 
