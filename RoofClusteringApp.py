@@ -200,55 +200,76 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
 
         # Page Handling group box
         page_handling_group = QtWidgets.QGroupBox("Page Handling")
+        page_handling_group.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         page_handling_layout = QtWidgets.QHBoxLayout()
 
         self.select_all_button = QtWidgets.QPushButton("Select All")
+        self.select_all_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         self.select_all_button.setFixedHeight(50)
-        select_fun = partial(self.select_or_deselect_all_images_in_current_page, select=True)
-        self.select_all_button.clicked.connect(select_fun)
+        self.select_all_button.clicked.connect(partial(self.select_or_deselect_all_images_in_current_page, select=True))
         page_handling_layout.addWidget(self.select_all_button)
 
         self.deselect_all_button = QtWidgets.QPushButton("Deselect All")
+        self.deselect_all_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         self.deselect_all_button.setFixedHeight(50)
-        deselect_fun = partial(self.select_or_deselect_all_images_in_current_page, select=False)
-        self.deselect_all_button.clicked.connect(deselect_fun)
+        self.deselect_all_button.clicked.connect(partial(self.select_or_deselect_all_images_in_current_page, select=False))
         page_handling_layout.addWidget(self.deselect_all_button)
 
         self.remove_unselected_button_page = QtWidgets.QPushButton("Remove unselected from \n current page")
+        self.remove_unselected_button_page.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         self.remove_unselected_button_page.setFixedHeight(50)
         self.remove_unselected_button_page.clicked.connect(self.remove_unselected_images)
         page_handling_layout.addWidget(self.remove_unselected_button_page)
 
         page_handling_group.setLayout(page_handling_layout)
-        button_groups_layout.addWidget(page_handling_group, 2)
+        button_groups_layout.addWidget(page_handling_group)
+        button_groups_layout.setStretchFactor(page_handling_group, 3)
 
         # Cluster Handling group box
         cluster_handling_group = QtWidgets.QGroupBox("Cluster Handling")
+        cluster_handling_group.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         cluster_handling_layout = QtWidgets.QVBoxLayout()
 
         self.remove_unselected_button_cluster = QtWidgets.QPushButton("Remove all \n unselected samples")
+        self.remove_unselected_button_cluster.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         self.remove_unselected_button_cluster.setFixedHeight(50)
         self.remove_unselected_button_cluster.clicked.connect(self.remove_all_unselected_images)
         cluster_handling_layout.addWidget(self.remove_unselected_button_cluster)
 
         cluster_handling_group.setLayout(cluster_handling_layout)
-        button_groups_layout.addWidget(cluster_handling_group, 1)
+        button_groups_layout.addWidget(cluster_handling_group)
+        button_groups_layout.setStretchFactor(cluster_handling_group, 1)
 
         # Global Functions group box
         global_functions_group = QtWidgets.QGroupBox("Global Functions")
-        global_functions_layout = QtWidgets.QVBoxLayout()
+        global_functions_group.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        global_functions_layout = QtWidgets.QHBoxLayout()
 
         self.save_button = QtWidgets.QPushButton("Save")
+        self.save_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         self.save_button.setFixedHeight(50)
-        save_fn = partial(self.save, is_button=True)
-        self.save_button.clicked.connect(save_fn)
+        self.save_button.clicked.connect(partial(self.save, is_button=True))
         global_functions_layout.addWidget(self.save_button)
 
+        self.export_csv_button = QtWidgets.QPushButton("Export to CSV")
+        self.export_csv_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        self.export_csv_button.setFixedHeight(50)
+        self.export_csv_button.clicked.connect(self.export_to_csv)
+        global_functions_layout.addWidget(self.export_csv_button)
+
+        self.export_json_button = QtWidgets.QPushButton("Export to JSON")
+        self.export_json_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        self.export_json_button.setFixedHeight(50)
+        self.export_json_button.clicked.connect(self.export_to_json)
+        global_functions_layout.addWidget(self.export_json_button)
+
         global_functions_group.setLayout(global_functions_layout)
-        button_groups_layout.addWidget(global_functions_group, 1)
+        button_groups_layout.addWidget(global_functions_group)
+        button_groups_layout.setStretchFactor(global_functions_group, 3)
 
         # Add the horizontal button layout
         layout.addLayout(button_groups_layout)
+
 
         # Connect keyboard and mouse events for navigation
         self.shortcut_left = QtGui.QShortcut(QtGui.QKeySequence("Left"), self)
@@ -422,6 +443,44 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             'assignments': self.assignments,
             'selected_images': self.selected_images
         }, self.features_file)
+
+
+    # Export functions
+    def export_to_csv(self):
+        # Prepare data for export
+        data = []
+        for image_path, attributes in self.assignments.items():
+            row = {"image_path": image_path}
+            row.update(attributes)
+            data.append(row)
+
+        # Open file dialog to save CSV
+        file_path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Export to CSV", "", "CSV Files (*.csv);;All Files (*)"
+        )
+        if file_path:
+            import csv
+            with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=["image_path"] + list(self.schema.keys()))
+                writer.writeheader()
+                for image_path, attributes in self.assignments.items():
+                    row = {"image_path": image_path}
+                    row.update(attributes)
+                    writer.writerow(row)
+            QtWidgets.QMessageBox.information(self, "Export Successful", f"Data exported to {file_path}.")
+
+
+    def export_to_json(self):
+        # Open file dialog to save JSON
+        file_path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Export to JSON", "", "JSON Files (*.json);;All Files (*)"
+        )
+        if file_path:
+            with open(file_path, 'w', encoding='utf-8') as jsonfile:
+                json.dump(self.assignments, jsonfile, indent=4)
+            QtWidgets.QMessageBox.information(self, "Export Successful", f"Data exported to {file_path}.")
+
+    
 
     def load_schema(self):
         with open(self.schema_file, 'r') as f:
@@ -706,11 +765,11 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
                     print(f'Iteration {n_iter+1}/{num_iterations} of pseudolabeling. No more pseudolabels. Stopping.')
                     break
 
-            # check if threshold is inside params
-            if 'threshold' in params:
-                acceptance_threshold = params['threshold']
-            else:
-                acceptance_threshold = 0
+        # check if threshold is inside params
+        if 'threshold' in params:
+            acceptance_threshold = params['threshold']
+        else:
+            acceptance_threshold = 0
 
         # else:
         # at the end, classify
