@@ -949,14 +949,117 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         return torch.cat(features, dim=0)
 
 
+
+
+
+class ConfigDialog(QtWidgets.QDialog):
+    def __init__(self, features_file, root_folder, schema_file):
+        super().__init__()
+        self.setWindowTitle("Select Configuration Files")
+        
+        self.layout = QtWidgets.QVBoxLayout()
+        
+        # Features File
+        self.features_label = QtWidgets.QLabel("Features File:")
+        self.features_input = QtWidgets.QLineEdit(features_file)
+        self.features_button = QtWidgets.QPushButton("Browse")
+        self.features_button.clicked.connect(self.browse_features)
+        
+        features_layout = QtWidgets.QHBoxLayout()
+        features_layout.addWidget(self.features_input)
+        features_layout.addWidget(self.features_button)
+        
+        # Root Folder
+        self.root_label = QtWidgets.QLabel("Root Folder:")
+        self.root_input = QtWidgets.QLineEdit(root_folder)
+        self.root_button = QtWidgets.QPushButton("Browse")
+        self.root_button.clicked.connect(self.browse_root)
+        
+        root_layout = QtWidgets.QHBoxLayout()
+        root_layout.addWidget(self.root_input)
+        root_layout.addWidget(self.root_button)
+        
+        # Schema File
+        self.schema_label = QtWidgets.QLabel("Schema File:")
+        self.schema_input = QtWidgets.QLineEdit(schema_file)
+        self.schema_button = QtWidgets.QPushButton("Browse")
+        self.schema_button.clicked.connect(self.browse_schema)
+        
+        schema_layout = QtWidgets.QHBoxLayout()
+        schema_layout.addWidget(self.schema_input)
+        schema_layout.addWidget(self.schema_button)
+        
+        # Buttons
+        self.button_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.StandardButton.Ok | QtWidgets.QDialogButtonBox.StandardButton.Cancel)
+        self.button_box.accepted.connect(self.validate_and_accept)
+        self.button_box.rejected.connect(self.reject)
+        
+        # Adding widgets to layout
+        self.layout.addWidget(self.features_label)
+        self.layout.addLayout(features_layout)
+        self.layout.addWidget(self.root_label)
+        self.layout.addLayout(root_layout)
+        self.layout.addWidget(self.schema_label)
+        self.layout.addLayout(schema_layout)
+        self.layout.addWidget(self.button_box)
+        
+        self.setLayout(self.layout)
+
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.center()
+
+
+    def center(self):
+        # NOTE: it does not work on wayland
+        screen = QtWidgets.QApplication.primaryScreen().availableGeometry()
+        dialog_geometry = self.geometry()
+        x = (screen.width() - dialog_geometry.width()) // 2
+        y = (screen.height() - dialog_geometry.height()) // 2
+        # compute scale factor
+        scale_factor = QtWidgets.QApplication.primaryScreen().devicePixelRatio()
+        # multiply
+        x = int(x*scale_factor)
+        y = int(y*scale_factor)
+        # move
+        self.move(x, y)
+
+        
+    def browse_features(self):
+        file_name, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Select Features File")
+        if file_name:
+            self.features_input.setText(file_name)
+    
+    def browse_root(self):
+        folder_name = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Root Folder")
+        if folder_name:
+            self.root_input.setText(folder_name)
+    
+    def browse_schema(self):
+        file_name, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Select Schema File")
+        if file_name:
+            self.schema_input.setText(file_name)
+
+    def validate_and_accept(self):
+        if not self.features_input.text().strip() or not self.root_input.text().strip() or not self.schema_input.text().strip():
+            QtWidgets.QMessageBox.warning(self, "Missing Information", "All fields must be filled before proceeding.")
+            return
+        self.accept()
+
+
 def main():
     app = QtWidgets.QApplication(sys.argv)
-    features_file = 'features.pt'
-    root_folder = 'segmentation_dataset/cropped_images'
-    schema_file = 'schema.json'
-    main_window = RoofClusteringApp(features_file, root_folder, schema_file)
-    main_window.show()
-    sys.exit(app.exec())
+    dialog = ConfigDialog('features.pt', 'segmentation_dataset/cropped_images', 'schema.json')
+    if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+        features_file = dialog.features_input.text()
+        root_folder = dialog.root_input.text()
+        schema_file = dialog.schema_input.text()
+        
+        main_window = RoofClusteringApp(features_file, root_folder, schema_file)
+        main_window.show()
+        sys.exit(app.exec())
+
 
 
 if __name__ == "__main__":
