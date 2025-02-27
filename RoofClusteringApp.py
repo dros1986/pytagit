@@ -17,6 +17,7 @@ import cv2
 from OOD4Inclusion import OOD4Inclusion  # Import the OOD4Inclusion class
 from CNNTrainer import ImageDataset, transform_fun
 from Helpers import ThresholdDialog, RFClassifier, CNNClassifier, kNNClassifier
+from QFlowLayout import QFlowLayout
 
 
 class DraggableLabel(QtWidgets.QLabel):
@@ -180,7 +181,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         layout.addLayout(main_layout)
 
         # Cluster selection buttons
-        self.button_layout = QtWidgets.QHBoxLayout()
+        self.button_layout = QFlowLayout()
         self.cluster_buttons = {}
         self.update_cluster_buttons()
         layout.addLayout(self.button_layout)
@@ -489,13 +490,21 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
     def load_or_compute_features(self):
         if os.path.exists(self.features_file):
             data = torch.load(self.features_file, weights_only=False)
-            self.features = data['features'][:self.max_samples]
+            self.features = data['features']
+            # set max_samples
+            if self.max_samples <= 0:
+                self.max_samples = self.features.shape[0]
+            # get other vars
+            self.features = self.features[:self.max_samples]
             self.image_paths = data['image_paths'][:self.max_samples]
             self.assignments = data.get('assignments', {})
             self.selected_images = data.get('selected_images', {})  # Load selected images per attribute
         else:
             images_folder = self.root_folder
-            self.image_paths = self.get_all_image_paths(images_folder)[:self.max_samples]
+            self.image_paths = self.get_all_image_paths(images_folder)
+            if self.max_samples <= 0:
+                self.max_samples = len(self.image_paths)
+            self.image_paths = self.image_paths[:self.max_samples]
             self.features = self.extract_features(self.image_paths)
             self.assignments = {}
             self.selected_images = {}  # Initialize empty dictionary for selected images
@@ -956,6 +965,8 @@ class ConfigDialog(QtWidgets.QDialog):
     def __init__(self, features_file, root_folder, schema_file):
         super().__init__()
         self.setWindowTitle("Select Configuration Files")
+
+        self.setMinimumWidth(800)
         
         self.layout = QtWidgets.QVBoxLayout()
         
@@ -988,6 +999,17 @@ class ConfigDialog(QtWidgets.QDialog):
         schema_layout = QtWidgets.QHBoxLayout()
         schema_layout.addWidget(self.schema_input)
         schema_layout.addWidget(self.schema_button)
+
+        # number of samples
+        self.num_samples_label = QtWidgets.QLabel("Number of samples (0 = use all):")
+        self.number_of_samples = QtWidgets.QDoubleSpinBox()
+        self.number_of_samples.setMinimum(0)
+        self.number_of_samples.setMaximum(1e10000)
+        self.number_of_samples.setDecimals(0)
+        self.number_of_samples.setSingleStep(5000)
+        self.number_of_samples.setValue(0)
+        # schema_layout.addWidget(QtWidgets.QLabel("Number of samples (0=all):"))
+        
         
         # Buttons
         self.button_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.StandardButton.Ok | QtWidgets.QDialogButtonBox.StandardButton.Cancel)
@@ -1001,6 +1023,8 @@ class ConfigDialog(QtWidgets.QDialog):
         self.layout.addLayout(root_layout)
         self.layout.addWidget(self.schema_label)
         self.layout.addLayout(schema_layout)
+        self.layout.addWidget(self.num_samples_label)
+        self.layout.addWidget(self.number_of_samples)
         self.layout.addWidget(self.button_box)
         
         self.setLayout(self.layout)
@@ -1050,13 +1074,17 @@ class ConfigDialog(QtWidgets.QDialog):
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
-    dialog = ConfigDialog('features.pt', 'segmentation_dataset/cropped_images', 'schema.json')
+    # dialog = ConfigDialog('features.pt', 'segmentation_dataset/cropped_images', 'schema.json')
+    # dialog = ConfigDialog('datasets/train-scene classification/features.pt', 'datasets/train-scene classification/train', 'datasets/train-scene classification/schema.json')
+    root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/FruitClassification/train'
+    dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/train', f'{root_dir}/schema.json')
     if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
         features_file = dialog.features_input.text()
         root_folder = dialog.root_input.text()
         schema_file = dialog.schema_input.text()
+        num_samples = int(dialog.number_of_samples.value())
         
-        main_window = RoofClusteringApp(features_file, root_folder, schema_file)
+        main_window = RoofClusteringApp(features_file, root_folder, schema_file, max_samples = num_samples)
         main_window.show()
         sys.exit(app.exec())
 
