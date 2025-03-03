@@ -28,6 +28,7 @@ class DraggableLabel(QtWidgets.QLabel):
         self.setAcceptDrops(True)
         self.setStyleSheet("border: 2px solid transparent;")  # Default border (transparent)
         self.update_selection_state()
+        self.setToolTip(self.image_path)  # Set the tooltip to display the image path
 
     def mousePressEvent(self, event):
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
@@ -1076,8 +1077,10 @@ def main():
     app = QtWidgets.QApplication(sys.argv)
     # dialog = ConfigDialog('features.pt', 'segmentation_dataset/cropped_images', 'schema.json')
     # dialog = ConfigDialog('datasets/train-scene classification/features.pt', 'datasets/train-scene classification/train', 'datasets/train-scene classification/schema.json')
-    root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/FruitClassification/train'
-    dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/train', f'{root_dir}/schema.json')
+    # root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/FruitClassification/train'
+    # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/train', f'{root_dir}/schema.json')
+    root_dir = 'datasets/garbage_classification/Garbage classification'
+    dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/Garbage classification', f'{root_dir}/schema.json')
     if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
         features_file = dialog.features_input.text()
         root_folder = dialog.root_input.text()
