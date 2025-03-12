@@ -75,6 +75,8 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.labels = {}
         self.load_or_compute_features()
         self.assign_images_to_clusters()
+        # Add a flag to track whether to show all images or only unselected images
+        self.show_only_unselected = False
         self.init_ui()
 
     def init_ui(self):
@@ -247,6 +249,13 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         global_functions_group.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         global_functions_layout = QtWidgets.QHBoxLayout()
 
+        # New button to toggle between showing all images and unselected images
+        self.toggle_unselected_button = QtWidgets.QPushButton("Show Unselected Images")
+        self.toggle_unselected_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        self.toggle_unselected_button.setFixedHeight(50)
+        self.toggle_unselected_button.clicked.connect(self.toggle_show_unselected_images)
+        global_functions_layout.addWidget(self.toggle_unselected_button)
+
         self.save_button = QtWidgets.QPushButton("Save")
         self.save_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         self.save_button.setFixedHeight(50)
@@ -288,7 +297,8 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
 
     @property
     def total_pages(self):
-        cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])
+        """Recalculate the total number of pages based on the current visibility mode and cluster."""
+        cluster_images = self.get_visible_images()  # Get visible images based on the current mode
         return (len(cluster_images) + self.page_size - 1) // self.page_size
     
     @property
@@ -310,15 +320,23 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
     
 
     def get_visible_images(self, return_idx=False):
-        # Calculate start and end indices for the current page
+        """Get the list of visible images based on the current mode (all or unselected)."""
         cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])[:self.max_samples]
-        start_idx = self.current_page * self.page_size
-        end_idx = min(start_idx + self.page_size, len(cluster_images))
-        # get filenames
-        filenames = [self.image_paths[image_idx] for image_idx in cluster_images[start_idx:end_idx]]
-        # return
+
+        # If showing only unselected images, filter the list
+        if self.show_only_unselected:
+            selected_image_paths = self.selected_images.get(self.current_attribute, set())
+            cluster_images = [
+                idx for idx in cluster_images
+                if self.image_paths[idx] not in selected_image_paths
+            ]
+
+        # Return filenames
+        filenames = [self.image_paths[image_idx] for image_idx in cluster_images]
+
+        # Return filenames and indices if requested
         if return_idx:
-            return filenames, list(range(start_idx,end_idx))
+            return filenames, list(range(len(cluster_images)))
         return filenames
     
 
@@ -384,12 +402,22 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             self.display_cluster_images()
 
 
+    def toggle_show_unselected_images(self):
+        """Toggle between showing all images and showing only unselected images."""
+        self.show_only_unselected = not self.show_only_unselected
+        if self.show_only_unselected:
+            self.toggle_unselected_button.setText("Show All Images")
+        else:
+            self.toggle_unselected_button.setText("Show Unselected Images")
+        # Reset to the first page when toggling modes
+        self.current_page = 0
+        self.display_cluster_images()
+
 
     def display_cluster_images(self):
+        """Display images based on the current mode (all or unselected)."""
         if self.current_attribute not in self.clusters:
             return
-
-        cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])[:self.max_samples]
 
         # Clear existing labels
         for label in list(self.labels.values()):
@@ -397,14 +425,18 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             label.deleteLater()
         self.labels.clear()
 
+        # Get visible images for the current page
+        visible_images = self.get_visible_images()
+
         # Calculate start and end indices for the current page
         start_idx = self.current_page * self.page_size
-        end_idx = min(start_idx + self.page_size, len(cluster_images))
+        end_idx = min(start_idx + self.page_size, len(visible_images))
 
         # Load images for the current page
-        for idx, image_idx in enumerate(cluster_images[start_idx:end_idx]):
-            image_path = self.image_paths[image_idx]
-            pixmap = QtGui.QPixmap(image_path).scaled(self.image_width, self.image_height, QtCore.Qt.AspectRatioMode.KeepAspectRatio)
+        for idx, image_path in enumerate(visible_images[start_idx:end_idx]):
+            pixmap = QtGui.QPixmap(image_path).scaled(
+                self.image_width, self.image_height, QtCore.Qt.AspectRatioMode.KeepAspectRatio
+            )
             label = DraggableLabel(image_path, self)
             label.setPixmap(pixmap)
             label.update_selection_state()
@@ -928,13 +960,18 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
     
 
     def change_cluster(self, cluster):
+        """Change the current cluster and update the UI."""
         self.current_cluster = cluster
         self.highlight_current_cluster_button()  # Highlight the new cluster button
+
         # Reset current_page if it's out of bounds for the new cluster
         total_pages = self.total_pages
         if self.current_page >= total_pages:
             self.current_page = 0  # Reset to the first page
-        self.display_cluster_images()  # Display images for the new cluster
+
+        # Display images for the new cluster
+        self.display_cluster_images()
+
 
     def extract_features(self, image_paths, batch_size=42, device='cuda'):
         # define model
@@ -1075,12 +1112,25 @@ class ConfigDialog(QtWidgets.QDialog):
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
+    # scene classification
     # dialog = ConfigDialog('features.pt', 'segmentation_dataset/cropped_images', 'schema.json')
     # dialog = ConfigDialog('datasets/train-scene classification/features.pt', 'datasets/train-scene classification/train', 'datasets/train-scene classification/schema.json')
+    # fruit
     # root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/FruitClassification/train'
     # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/train', f'{root_dir}/schema.json')
-    root_dir = 'datasets/garbage_classification/Garbage classification'
-    dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/Garbage classification', f'{root_dir}/schema.json')
+    # # garbage
+    # root_dir = 'datasets/garbage_classification/Garbage classification'
+    # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/Garbage classification', f'{root_dir}/schema.json')
+    # fashion mnist
+    root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/fashion-mnist/data'
+    dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/fashion_mnist_images', f'{root_dir}/schema.json')
+    # # mnist
+    # root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/mnist'
+    # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/mnist', f'{root_dir}/schema.json')
+    # # mvtech
+    # root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/mvtec_anomaly_detection'
+    # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/all', f'{root_dir}/schema.json')
+
     if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
         features_file = dialog.features_input.text()
         root_folder = dialog.root_input.text()
