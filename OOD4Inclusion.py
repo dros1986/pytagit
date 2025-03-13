@@ -5,7 +5,7 @@ from sklearn.metrics import pairwise_distances
 from tqdm.rich import tqdm
 
 class OOD4Inclusion:
-    def __init__(self, distance_function='cosine', use_lad=True, label_error_detection=True):
+    def __init__(self, distance_function='cosine', use_lad=True, label_error_detection=False):
         self.clean_distribution = OrderedDict()
         self.distance_function = distance_function
         self.use_lad = use_lad
@@ -19,7 +19,7 @@ class OOD4Inclusion:
         """
         self.clean_distribution[class_id] = feature_vectors
 
-    def evaluate_new_samples(self, class_id, feature_vectors, threshold=0.5):
+    def evaluate_new_samples(self, class_id, feature_vectors, threshold=None):
         """
         Evaluate whether new feature vectors belong to the clean distribution.
         :param class_id: Unique identifier for the class.
@@ -43,5 +43,9 @@ class OOD4Inclusion:
 
         outlier_scores = irrelevant_scores + label_error_scores
         outlier_scores = torch.from_numpy(outlier_scores).float()
+        # if threshold is not specified, return the outlier scores
+        if threshold is None:
+            return None, outlier_scores
+        # otherwise, return a boolean mask indicating inliers and the scores
         inlier_mask = outlier_scores <= threshold  # True for inliers, False for outliers
         return inlier_mask, outlier_scores

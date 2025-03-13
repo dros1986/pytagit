@@ -14,6 +14,119 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import RichProgressBar, ModelCheckpoint
 from tqdm.rich import tqdm
+from sklearn.metrics import pairwise_distances
+
+
+
+class VisualThresholdSelector(QtWidgets.QDialog):
+    def __init__(self, feature_vectors, clean_features, image_paths, distance_function='cosine', use_lad=True, num_bins=10, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Visual Threshold Selector")
+        self.setModal(True)
+
+        # Parameters
+        self.feature_vectors = feature_vectors
+        self.clean_features = clean_features
+        self.image_paths = image_paths  # Add image_paths as an attribute
+        self.distance_function = distance_function
+        self.use_lad = use_lad  # Initialize the use_lad attribute
+        self.num_bins = num_bins  # Number of distance bins
+
+        # Layout
+        layout = QtWidgets.QVBoxLayout(self)
+
+        # Instructions
+        instructions = QtWidgets.QLabel(
+            "Select the rightmost image that you consider part of the cluster.\n"
+            "Images are ordered by their distance from the clean distribution."
+        )
+        layout.addWidget(instructions)
+
+        # Image Grid
+        self.image_grid = QtWidgets.QGridLayout()
+        self.representative_images = self.calculate_representative_images()
+        self.distance_labels = []  # Store references to distance labels
+        self.add_images_to_grid()
+        layout.addLayout(self.image_grid)
+
+        # Selected Threshold
+        self.selected_threshold = None
+
+        # Buttons
+        button_layout = QtWidgets.QHBoxLayout()
+        self.cancel_button = QtWidgets.QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.reject)
+        self.confirm_button = QtWidgets.QPushButton("Confirm")
+        self.confirm_button.clicked.connect(self.accept)
+        self.confirm_button.setDefault(True)
+        self.cancel_button.setFixedHeight(50)
+        self.confirm_button.setFixedHeight(50)
+        button_layout.addWidget(self.cancel_button)
+        button_layout.addWidget(self.confirm_button)
+        layout.addLayout(button_layout)
+
+    def calculate_representative_images(self):
+        """
+        Calculate representative images for each distance bin.
+        :return: List of tuples (distance, representative_image_path).
+        """
+        # Compute pairwise distances
+        distances = pairwise_distances(
+            self.feature_vectors.numpy(), 
+            self.clean_features.numpy(), 
+            metric=self.distance_function
+        )
+        avg_distances = np.mean(distances, axis=1) if self.use_lad else np.zeros(distances.shape[0])
+
+        # Bin distances
+        min_dist = np.min(avg_distances)
+        max_dist = np.percentile(avg_distances, 20)  # Use the 20th percentile as the upper bound
+        bins = np.linspace(min_dist, max_dist, self.num_bins + 1)
+        binned_indices = np.digitize(avg_distances, bins) - 1
+
+        # Select representative images for each bin
+        representative_images = []
+        for bin_idx in range(self.num_bins):
+            indices_in_bin = np.where(binned_indices == bin_idx)[0]
+            if len(indices_in_bin) > 0:
+                median_index = indices_in_bin[len(indices_in_bin) // 2]  # Median index (deterministic)
+                representative_images.append((bins[bin_idx], self.image_paths[median_index]))
+        return representative_images
+
+    def add_images_to_grid(self):
+        """Add representative images to the grid."""
+        for col, (distance, image_path) in enumerate(self.representative_images):
+            # Load and display image
+            pixmap = QtGui.QPixmap(image_path).scaled(100, 100, QtCore.Qt.AspectRatioMode.KeepAspectRatio)
+            label = QtWidgets.QLabel()
+            label.setPixmap(pixmap)
+            label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            label.setToolTip(f"Distance: {distance:.3f}")
+            label.mousePressEvent = partial(self.select_image, distance=distance, column=col)
+            self.image_grid.addWidget(label, 0, col)
+
+            # Add distance label
+            distance_label = QtWidgets.QLabel(f"{distance:.3f}")
+            distance_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            distance_label.setStyleSheet("background-color: white; padding: 5px;")  # Default style
+            self.image_grid.addWidget(distance_label, 1, col)
+            self.distance_labels.append(distance_label)  # Store reference to the label
+
+    def select_image(self, event, distance, column):
+        """Handle image selection."""
+        self.selected_threshold = distance
+
+        # Reset all labels to default style
+        for label in self.distance_labels:
+            label.setStyleSheet("background-color: white; padding: 5px;")
+
+        # Highlight the selected label
+        selected_label = self.distance_labels[column]
+        selected_label.setStyleSheet("background-color: lightblue; padding: 5px; font-weight: bold;")
+
+    def get_threshold(self):
+        """Return the selected threshold."""
+        return self.selected_threshold
 
 
 class ThresholdDialog(QtWidgets.QDialog):

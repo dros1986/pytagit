@@ -16,7 +16,7 @@ from einops import rearrange
 import cv2
 from OOD4Inclusion import OOD4Inclusion  # Import the OOD4Inclusion class
 from CNNTrainer import ImageDataset, transform_fun
-from Helpers import ThresholdDialog, RFClassifier, CNNClassifier, kNNClassifier
+from Helpers import ThresholdDialog, RFClassifier, CNNClassifier, kNNClassifier, VisualThresholdSelector
 from QFlowLayout import QFlowLayout
 
 
@@ -294,33 +294,49 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.display_cluster_images()
 
 
-
     @property
     def total_pages(self):
         """Recalculate the total number of pages based on the current visibility mode and cluster."""
-        cluster_images = self.get_visible_images()  # Get visible images based on the current mode
-        return (len(cluster_images) + self.page_size - 1) // self.page_size
-    
+        visible_images = self.get_all_visible_images()  # Get all visible images
+        return (len(visible_images) + self.page_size - 1) // self.page_size
+
+
     @property
     def num_selected_images_in_page(self):
-        # Calculate start and end indices for the current page
-        cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])[:self.max_samples]
-        start_idx = self.current_page * self.page_size
-        end_idx = min(start_idx + self.page_size, len(cluster_images))
-        # if no images selected for current attribute, return 0
-        if self.current_attribute not in self.selected_images: 
+        """Calculate the number of selected images in the current page."""
+        # Get visible images for the current page
+        visible_images = self.get_visible_images()
+
+        # If no images are selected for the current attribute, return 0
+        if self.current_attribute not in self.selected_images:
             return 0
-        # count selected images
+
+        # Count selected images among the visible images
         num_selected = 0
-        for cur_image_idx in cluster_images[start_idx:end_idx]:
-            if self.image_paths[cur_image_idx] in self.selected_images[self.current_attribute]:
+        for image_path in visible_images:
+            if image_path in self.selected_images[self.current_attribute]:
                 num_selected += 1
-        # return
+
         return num_selected
     
 
-    def get_visible_images(self, return_idx=False):
-        """Get the list of visible images based on the current mode (all or unselected)."""
+    def get_all_visible_images(self):
+        """Get the list of all visible images based on the current mode (all or unselected)."""
+        cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])[:self.max_samples]
+        # If showing only unselected images, filter the list
+        if self.show_only_unselected:
+            selected_image_paths = self.selected_images.get(self.current_attribute, set())
+            cluster_images = [
+                idx for idx in cluster_images
+                if self.image_paths[idx] not in selected_image_paths
+            ]
+        # Return filenames
+        filenames = [self.image_paths[image_idx] for image_idx in cluster_images]
+        return filenames
+    
+
+    def get_visible_images(self):
+        """Get the list of visible images for the current page."""
         cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])[:self.max_samples]
 
         # If showing only unselected images, filter the list
@@ -331,12 +347,12 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
                 if self.image_paths[idx] not in selected_image_paths
             ]
 
-        # Return filenames
-        filenames = [self.image_paths[image_idx] for image_idx in cluster_images]
+        # Calculate start and end indices for the current page
+        start_idx = self.current_page * self.page_size
+        end_idx = min(start_idx + self.page_size, len(cluster_images))
 
-        # Return filenames and indices if requested
-        if return_idx:
-            return filenames, list(range(len(cluster_images)))
+        # Get filenames
+        filenames = [self.image_paths[image_idx] for image_idx in cluster_images[start_idx:end_idx]]
         return filenames
     
 
@@ -358,9 +374,12 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
 
 
     def select_or_deselect_images_in_page_on_keypress(self):
+        print(self.num_selected_images_in_page)
         if self.num_selected_images_in_page > 0:
+            print('QUI 1')
             self.select_or_deselect_all_images_in_current_page(select=False)
         else:
+            print('QUI 2')
             self.select_or_deselect_all_images_in_current_page(select=True)
 
 
@@ -415,25 +434,21 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
 
 
     def display_cluster_images(self):
-        """Display images based on the current mode (all or unselected)."""
+        """Display images for the current cluster and page."""
         if self.current_attribute not in self.clusters:
             return
-
+        
         # Clear existing labels
         for label in list(self.labels.values()):
             self.image_layout.removeWidget(label)
             label.deleteLater()
         self.labels.clear()
-
+        
         # Get visible images for the current page
         visible_images = self.get_visible_images()
-
-        # Calculate start and end indices for the current page
-        start_idx = self.current_page * self.page_size
-        end_idx = min(start_idx + self.page_size, len(visible_images))
-
+        
         # Load images for the current page
-        for idx, image_path in enumerate(visible_images[start_idx:end_idx]):
+        for idx, image_path in enumerate(visible_images):
             pixmap = QtGui.QPixmap(image_path).scaled(
                 self.image_width, self.image_height, QtCore.Qt.AspectRatioMode.KeepAspectRatio
             )
@@ -444,9 +459,10 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             row = idx // self.n_images_per_row
             col = idx % self.n_images_per_row
             self.image_layout.addWidget(self.labels[image_path], row, col)
-
+        
         # Update page label
         self.page_label.setText(f"Page {self.current_page + 1} / {self.total_pages}")
+
 
     def navigate_next_page(self):
         if self.current_page < self.total_pages - 1:
@@ -553,6 +569,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         return image_paths
 
     def assign_images_to_clusters(self):
+        """Assign images to clusters based on the current assignments."""
         self.clusters = {key: {val: [] for val in values + ["undefined"]} for key, values in self.schema.items()}
         for i, img_path in enumerate(self.image_paths):
             assigned_value = self.assignments.get(img_path, {}).get(self.current_attribute, "undefined")
@@ -568,42 +585,84 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
     
 
     def run_ood_classification(self):
-        # Open threshold dialog
-        dialog = ThresholdDialog(self)
+
+        # Get unselected feature vectors from other clusters and not verified samples from the current cluster
+        selected_indices = []
+        unselected_indices = []
+
+        for cluster, indices in self.clusters[self.current_attribute].items():
+            for idx in indices:
+                # get current image path
+                image_path = self.image_paths[idx]
+                # if it is selected
+                if image_path in self.selected_images.get(self.current_attribute, set()):
+                    # if it belongs to current cluster
+                    if cluster == self.current_cluster:
+                        # add to selected
+                        selected_indices.append(idx)
+                else:
+                    # add to unselected
+                    unselected_indices.append(idx)
+        # get features
+        selected_features = self.features[selected_indices]
+        unselected_features = self.features[unselected_indices]
+
+        # Check if selected_features is empty
+        if len(selected_features) == 0:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Error",
+                "No images are selected in the current cluster. Please select some images before running OOD classification."
+            )
+            return
+
+        # Check if unselected_features is empty
+        if len(unselected_features) == 0:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Error",
+                "All images are already selected. No unselected images are available for OOD classification."
+            )
+            return
+
+        # Use OOD4Inclusion to compute outlier scores
+        self.setVisible(False) # Hide the main window
+        print('-'*20, '\nComputing anomaly scores..please wait.', '\n'+'-'*20)
+        ood_classifier = OOD4Inclusion()
+        ood_classifier.set_clean_distribution(self.current_cluster, selected_features)
+        _, outlier_scores = ood_classifier.evaluate_new_samples(self.current_cluster, unselected_features, threshold=None)
+        self.setVisible(True) # Show the main window
+
+        # Open the VisualThresholdSelector dialog
+        dialog = VisualThresholdSelector(
+            unselected_features,
+            selected_features,
+            self.image_paths,
+            distance_function='cosine',
+            use_lad=True,
+            num_bins=15,
+            parent=self
+        )
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
             threshold = dialog.get_threshold()
-            
-            # Get selected feature vectors for the current cluster
-            selected_indices = self.clusters[self.current_attribute].get(self.current_cluster, [])
-            selected_features = self.features[selected_indices]
-            
-            # Get unselected feature vectors from other clusters and not verified samples from the current cluster
-            unselected_indices = []
-            for cluster, indices in self.clusters[self.current_attribute].items():
-                for idx in indices:
-                    image_path = self.image_paths[idx]
-                    if image_path not in self.selected_images.get(self.current_attribute, set()):
-                        unselected_indices.append(idx)
-            unselected_features = self.features[unselected_indices]
-            
-            # Use OOD4Inclusion to classify unselected samples
-            ood_classifier = OOD4Inclusion()
-            ood_classifier.set_clean_distribution(self.current_cluster, selected_features)
-            inlier_mask, _ = ood_classifier.evaluate_new_samples(self.current_cluster, unselected_features, threshold)
-            
-            # Assign inliers to the current cluster and outliers to "undefined"
+            if threshold is None:
+                QtWidgets.QMessageBox.warning(self, "Error", "No threshold selected.")
+                return
+
+            # Apply the selected threshold to classify samples
+            inlier_mask = outlier_scores <= threshold
             for idx, is_inlier in zip(unselected_indices, inlier_mask):
                 image_path = self.image_paths[idx]
                 if image_path not in self.assignments:
                     self.assignments[image_path] = {}  # Initialize if not present
                 if is_inlier:
                     self.assignments[image_path][self.current_attribute] = self.current_cluster
-                else:
-                    self.assignments[image_path][self.current_attribute] = "undefined"
-            
-            # Save updated assignments
-            self.save()
-            
+                elif self.current_attribute not in self.assignments[image_path]:
+                        pass
+                elif self.assignments[image_path][self.current_attribute] == self.current_cluster:
+                        self.assignments[image_path][self.current_attribute] = "undefined"
+
+
             # Refresh the UI
             self.assign_images_to_clusters()
             self.display_cluster_images()
@@ -1121,12 +1180,12 @@ def main():
     # # garbage
     # root_dir = 'datasets/garbage_classification/Garbage classification'
     # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/Garbage classification', f'{root_dir}/schema.json')
-    # fashion mnist
-    root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/fashion-mnist/data'
-    dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/fashion_mnist_images', f'{root_dir}/schema.json')
-    # # mnist
-    # root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/mnist'
-    # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/mnist', f'{root_dir}/schema.json')
+    # # fashion mnist
+    # root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/fashion-mnist/data'
+    # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/fashion_mnist_images', f'{root_dir}/schema.json')
+    # mnist
+    root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/mnist'
+    dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/mnist', f'{root_dir}/schema.json')
     # # mvtech
     # root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/mvtec_anomaly_detection'
     # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/all', f'{root_dir}/schema.json')
