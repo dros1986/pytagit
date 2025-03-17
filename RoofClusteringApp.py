@@ -17,6 +17,7 @@ import cv2
 from OOD4Inclusion import OOD4Inclusion  # Import the OOD4Inclusion class
 from CNNTrainer import ImageDataset, transform_fun
 from Helpers import ThresholdDialog, RFClassifier, CNNClassifier, kNNClassifier, VisualThresholdSelector
+from TSNEDialog import TSNEDialog
 from QFlowLayout import QFlowLayout
 
 
@@ -105,6 +106,11 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.ood_button.setFixedHeight(50)
         self.ood_button.clicked.connect(self.run_ood_classification)
         auto_classify_layout.addWidget(self.ood_button)
+
+        self.tsne_button = QtWidgets.QPushButton("TSNE")
+        self.tsne_button.setFixedHeight(50)
+        self.tsne_button.clicked.connect(self.run_tsne)
+        auto_classify_layout.addWidget(self.tsne_button)
 
         self.classifiers = [RFClassifier(), CNNClassifier(), kNNClassifier()]
         for cur_classifier in self.classifiers:
@@ -582,6 +588,67 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         self.assign_images_to_clusters()
         self.update_cluster_buttons()  # Update the cluster buttons
         self.display_cluster_images()  # Display images for the new attribute and cluster
+
+
+    def run_tsne(self):
+        # Get all image indices for the current attribute
+        all_image_indices = []
+        for cluster, indices in self.clusters[self.current_attribute].items():
+            all_image_indices.extend(indices)
+
+        # Separate selected and non-selected images
+        selected_images_current_cluster = {
+            img for img in self.selected_images.get(self.current_attribute, set())
+            if self.assignments.get(img, {}).get(self.current_attribute) == self.current_cluster
+        }
+
+        non_selected_images = {
+            self.image_paths[idx] for idx in all_image_indices
+            if self.image_paths[idx] not in self.selected_images.get(self.current_attribute, set())
+        }
+
+        # Combine selected images from the current cluster and all non-selected images
+        involved_image_paths = list(selected_images_current_cluster.union(non_selected_images))
+
+        # Extract feature vectors for the involved images
+        involved_feature_vectors = np.array([
+            self.features[self.image_paths.index(img_path)].numpy()
+            for img_path in involved_image_paths
+        ])
+
+        # Check if the number of involved images is less than 2
+        if len(involved_image_paths) < 2:
+            QtWidgets.QMessageBox.warning(self, "Error", "At least two images are required for t-SNE.")
+            return
+
+        # Prepare selected_images in the correct format
+        selected_images_for_tsnedialog = {
+            self.current_cluster: selected_images_current_cluster
+        }
+
+        # Open t-SNE dialog
+        dialog = TSNEDialog(
+            feature_vectors=involved_feature_vectors,
+            image_paths=involved_image_paths,
+            selected_images=selected_images_for_tsnedialog,
+            current_cluster=self.current_cluster,
+            assignments=self.assignments,
+            parent=self
+        )
+        dialog.exec()
+
+        # Update the assignments based on the drawn boundaries
+        for image_path, cluster in dialog.assignments.items():
+            # Ensure self.assignments[image_path] is a dictionary
+            if image_path not in self.assignments:
+                self.assignments[image_path] = {}
+            # Assign the cluster name to the current attribute
+            self.assignments[image_path][self.current_attribute] = cluster
+
+        # Refresh the UI
+        self.assign_images_to_clusters()
+        self.display_cluster_images()
+
     
 
     def run_ood_classification(self):
@@ -1174,9 +1241,9 @@ def main():
     # scene classification
     # dialog = ConfigDialog('features.pt', 'segmentation_dataset/cropped_images', 'schema.json')
     # dialog = ConfigDialog('datasets/train-scene classification/features.pt', 'datasets/train-scene classification/train', 'datasets/train-scene classification/schema.json')
-    # fruit
-    # root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/FruitClassification/train'
-    # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/train', f'{root_dir}/schema.json')
+    # # fruit
+    root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/FruitClassification/train'
+    dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/train', f'{root_dir}/schema.json')
     # # garbage
     # root_dir = 'datasets/garbage_classification/Garbage classification'
     # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/Garbage classification', f'{root_dir}/schema.json')
@@ -1184,8 +1251,8 @@ def main():
     # root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/fashion-mnist/data'
     # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/fashion_mnist_images', f'{root_dir}/schema.json')
     # mnist
-    root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/mnist'
-    dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/mnist', f'{root_dir}/schema.json')
+    # root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/mnist'
+    # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/mnist', f'{root_dir}/schema.json')
     # # mvtech
     # root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/mvtec_anomaly_detection'
     # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/all', f'{root_dir}/schema.json')
