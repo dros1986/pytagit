@@ -238,7 +238,13 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
         # Cluster Handling group box
         cluster_handling_group = QtWidgets.QGroupBox("Cluster Handling")
         cluster_handling_group.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        cluster_handling_layout = QtWidgets.QVBoxLayout()
+        cluster_handling_layout = QtWidgets.QHBoxLayout()
+
+        self.selected_all_button_cluster = QtWidgets.QPushButton("Select all")
+        self.selected_all_button_cluster.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        self.selected_all_button_cluster.setFixedHeight(50)
+        self.selected_all_button_cluster.clicked.connect(partial(self.select_or_deselect_all_images_in_current_cluster, select=True))
+        cluster_handling_layout.addWidget(self.selected_all_button_cluster)
 
         self.remove_unselected_button_cluster = QtWidgets.QPushButton("Remove all \n unselected samples")
         self.remove_unselected_button_cluster.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
@@ -248,7 +254,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
 
         cluster_handling_group.setLayout(cluster_handling_layout)
         button_groups_layout.addWidget(cluster_handling_group)
-        button_groups_layout.setStretchFactor(cluster_handling_group, 1)
+        button_groups_layout.setStretchFactor(cluster_handling_group, 2)
 
         # Global Functions group box
         global_functions_group = QtWidgets.QGroupBox("Global Functions")
@@ -382,11 +388,28 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
     def select_or_deselect_images_in_page_on_keypress(self):
         print(self.num_selected_images_in_page)
         if self.num_selected_images_in_page > 0:
-            print('QUI 1')
             self.select_or_deselect_all_images_in_current_page(select=False)
         else:
-            print('QUI 2')
             self.select_or_deselect_all_images_in_current_page(select=True)
+
+
+    
+    def select_or_deselect_all_images_in_current_cluster(self, select=True):
+        # get cluster images
+        cluster_images = self.clusters[self.current_attribute].get(self.current_cluster, [])[:self.max_samples]
+        # visible_images = self.get_visible_images()
+        # select all images in the current page
+        for image_path in cluster_images:
+            # create set of selected images if it does not exist
+            if self.current_attribute not in self.selected_images:
+                self.selected_images[self.current_attribute] = set()
+            # add current image to selected images
+            if select:
+                self.selected_images[self.current_attribute].add(image_path)
+            else:
+                self.selected_images[self.current_attribute].discard(image_path)
+        # display cluster images
+        self.display_cluster_images()
 
 
 
@@ -1021,7 +1044,7 @@ class RoofClusteringApp(QtWidgets.QMainWindow):
             self.toggle_selection(image_path, force_select=True)
 
         # Save the updated assignments and selected images
-        self.save()
+        # self.save()
 
         # Incrementally update the UI for the moved image
         self.update_image_position(image_path)
@@ -1242,8 +1265,9 @@ def main():
     # dialog = ConfigDialog('features.pt', 'segmentation_dataset/cropped_images', 'schema.json')
     # dialog = ConfigDialog('datasets/train-scene classification/features.pt', 'datasets/train-scene classification/train', 'datasets/train-scene classification/schema.json')
     # # fruit
-    root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/FruitClassification/train'
-    dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/train', f'{root_dir}/schema.json')
+    # root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/FruitClassification/train'
+    # # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/train', f'{root_dir}/schema.json')
+    # dialog = ConfigDialog(f'{root_dir}/ciaone1.pt', f'{root_dir}/train', f'{root_dir}/schema.json')
     # # garbage
     # root_dir = 'datasets/garbage_classification/Garbage classification'
     # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/Garbage classification', f'{root_dir}/schema.json')
@@ -1251,8 +1275,9 @@ def main():
     # root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/fashion-mnist/data'
     # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/fashion_mnist_images', f'{root_dir}/schema.json')
     # mnist
-    # root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/mnist'
+    root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/mnist'
     # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/mnist', f'{root_dir}/schema.json')
+    dialog = ConfigDialog(f'{root_dir}/ciaone.pt', f'{root_dir}/mnist', f'{root_dir}/schema.json')
     # # mvtech
     # root_dir = '/home/flavio/workspace/SMILE/OODRoofClustering/datasets/mvtec_anomaly_detection'
     # dialog = ConfigDialog(f'{root_dir}/features.pt', f'{root_dir}/all', f'{root_dir}/schema.json')
