@@ -23,7 +23,7 @@ If you use PyTagit, please cite us:
 
 At startup, all images are unclassified. You can assign them via drag-and-drop:
 
-![Main window](https://github.com/dros1986/pytagit/blob/247fdce9967567caa6b15f5fe97c88c9e9848dab/res/main_window.png)
+![Main window](https://github.com/dros1986/pytagit/blob/2e73f12c4028bac1bd9827d2a261a528c3b3ea55/res/main_window.png)
 
 Start by assigning a few examples per class. Then, apply:
 
