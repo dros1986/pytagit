@@ -23,7 +23,7 @@ If you use PyTagit, please cite us:
 
 At startup, all images are unclassified. You can assign them via drag-and-drop:
 
-![Main window](https://github.com/dros1986/pytagit/blob/2e73f12c4028bac1bd9827d2a261a528c3b3ea55/res/main_window.png)
+![Main window](https://raw.githubusercontent.com/dros1986/pytagit/refs/heads/main/res/main_window.png?token=GHSAT0AAAAAAC4XJIVUPCZIQQSYBBWK2BPS2BZUXMA)
 
 Start by assigning a few examples per class. Then, apply:
 
@@ -37,12 +37,12 @@ For accelerated labeling, use:
 
 Draw a decision boundary directly on a 2D feature map to assign multiple samples:
 
-![t-SNE](https://github.com/dros1986/pytagit/blob/247fdce9967567caa6b15f5fe97c88c9e9848dab/res/interactive_tsne.png)
+![t-SNE](https://raw.githubusercontent.com/dros1986/pytagit/refs/heads/main/res/interactive_tsne.png?token=GHSAT0AAAAAAC4XJIVUAQQF7YBEKZGQBO522BZUYVQ)
 
 #### Out-of-Distribution Detection
 
 Useful for quality control scenarios: find samples close to a class using feature-based OOD:
 
-![OOD](https://github.com/dros1986/pytagit/blob/247fdce9967567caa6b15f5fe97c88c9e9848dab/res/visual_ood.png)
+![OOD](https://raw.githubusercontent.com/dros1986/pytagit/refs/heads/main/res/visual_ood.png?token=GHSAT0AAAAAAC4XJIVVS7QISXNSAZEEL2M22BZUZEQ)
 
 To classify all samples, use Random Forest with a confidence threshold of 0.
