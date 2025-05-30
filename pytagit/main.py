@@ -55,7 +55,7 @@ class DraggableLabel(QtWidgets.QLabel):
 
 
 
-class RoofClusteringApp(QtWidgets.QMainWindow):
+class PyTagit(QtWidgets.QMainWindow):
     def __init__(self, features_file, root_folder, schema_file, max_samples=10000, n_images_per_row=10, image_height=150, image_width=150, window_height=900, window_width=1400, n_rows_per_page=4):
         super().__init__()
         self.features_file = features_file
@@ -1180,7 +1180,7 @@ def main():
     dialog = ConfigDialog()
     if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
         features_file, root_folder, schema, num_samples = dialog.get_values()
-        main_window = RoofClusteringApp(features_file, root_folder, schema, max_samples = num_samples)
+        main_window = PyTagit(features_file, root_folder, schema, max_samples = num_samples)
         main_window.show()
         sys.exit(app.exec())
 
