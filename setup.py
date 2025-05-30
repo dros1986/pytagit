@@ -4,12 +4,12 @@ from setuptools import setup, find_packages
 
 setup(
     name="pytagit",
-    version="0.1.0",
-    author="Il tuo nome",
-    author_email="tuo@email.com",
+    version="0.1.1",
+    author="Flavio Piccoli",
+    author_email="dros1986@gmail.com",
     description="Interactive tool for image tagging with the human in the loop",
 	keywords="image tagging, interactive tool, human in the loop, pytorch, PyQt6, t-SNE, CNN training",
-	license="MIT",
+	license="CC-BY-NC-4.0",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
     url="https://github.com/dros1986/pytagit",
@@ -37,7 +37,7 @@ setup(
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
+        "License :: Other/Proprietary License",
         "Operating System :: OS Independent",
         "Environment :: X11 Applications :: Qt",
         "Intended Audience :: Science/Research",

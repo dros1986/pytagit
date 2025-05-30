@@ -1,3 +1,5 @@
+![License](https://img.shields.io/badge/license-CC--BY--NC--4.0-blue.svg)
+
 ### PyTagit
 
 **PyTagit** is a human-in-the-loop tool for large-scale image classification.  
