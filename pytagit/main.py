@@ -15,12 +15,12 @@ import albumentations as A
 import torch.nn.functional as F
 from einops import rearrange
 import cv2
-from OOD4Inclusion import OOD4Inclusion  # Import the OOD4Inclusion class
-from CNNTrainer import ImageDataset, transform_fun
-from Helpers import ThresholdDialog, RFClassifier, CNNClassifier, kNNClassifier, VisualThresholdSelector
-from TSNEDialog import TSNEDialog
-from ConfigDialog import ConfigDialog
-from QFlowLayout import QFlowLayout
+from .OOD4Inclusion import OOD4Inclusion  # Import the OOD4Inclusion class
+from .CNNTrainer import ImageDataset, transform_fun
+from .Helpers import ThresholdDialog, RFClassifier, CNNClassifier, kNNClassifier, VisualThresholdSelector
+from .TSNEDialog import TSNEDialog
+from .ConfigDialog import ConfigDialog
+from .QFlowLayout import QFlowLayout
 
 
 class DraggableLabel(QtWidgets.QLabel):

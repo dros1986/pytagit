@@ -5,7 +5,7 @@ from PyQt6 import QtWidgets, QtGui, QtCore
 from sklearn import preprocessing
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
-from CNNTrainer import CNNTrainer, ImageDataset, transform_fun
+from .CNNTrainer import CNNTrainer, ImageDataset, transform_fun
 import albumentations as A
 from PIL import Image
 from einops import rearrange
