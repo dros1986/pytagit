@@ -1,0 +1,6 @@
+*.pth
+*.ckpt
+*.pyc
+venv
+dist
+.egg-info
