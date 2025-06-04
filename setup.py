@@ -37,7 +37,6 @@ setup(
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: Creative Commons Attribution Non-Commercial (CC BY-NC)",
         "Operating System :: OS Independent",
         "Environment :: X11 Applications :: Qt",
         "Intended Audience :: Science/Research",
