@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="pytagit",
-    version="0.1.4",
+    version="0.1.5",
     author="Flavio Piccoli",
     author_email="dros1986@gmail.com",
     description="Interactive tool for image tagging with the human in the loop",
