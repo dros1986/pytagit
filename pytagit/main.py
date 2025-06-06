@@ -83,7 +83,7 @@ class PyTagit(QtWidgets.QMainWindow):
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle("Roof Clustering by Attribute")
+        self.setWindowTitle("PyTagit – AI-Powered Annotation Assistant")
         self.setGeometry(100, 100, self.window_width, self.window_height)
         central_widget = QtWidgets.QWidget()
         self.setCentralWidget(central_widget)
