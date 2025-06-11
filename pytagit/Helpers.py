@@ -471,6 +471,9 @@ class CNNClassifier(MultiClassClassifier):
         transform = partial(transform_fun, train=False, sz=256)
         # init model and output
         self.model.eval()
+        # check if model is on GPU
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.model.to(device)
         predictions = []
         probs = []
         # create dataloader
@@ -479,6 +482,7 @@ class CNNClassifier(MultiClassClassifier):
 
         for batch in tqdm(dataloader):
             images, labels = batch
+            images = images.to(device)
             with torch.no_grad():
                 output = self.model(images)
                 output = F.softmax(output, dim=0)
@@ -489,6 +493,10 @@ class CNNClassifier(MultiClassClassifier):
 
         predictions = torch.cat(predictions)
         probs = torch.cat(probs)
+
+        # back to CPU
+        predictions = predictions.cpu()
+        probs = probs.cpu()
 
         
         return predictions, probs
